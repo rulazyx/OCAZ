@@ -416,5 +416,5 @@ const Papiers = (() => {
     $('#annonce-ok').addEventListener('click', () => { enregistrerAnnonce(); $('#dlg-annonce').close(); toast('Annonce enregistrée'); render(); });
   }
 
-  return { init, section, champsAchat, apresAchat, numeroter, ouvrirPolice, lignesPolice, rappelRetrait, lienWhatsapp, messageClient, telIntl, fenetre, telecharger, TYPES_PIECE, PAIEMENTS_ACHAT };
+  return { init, section, champsAchat, apresAchat, numeroter, ouvrirPolice, imprimerPolice, exporterPolice, lignesPolice, rappelRetrait, lienWhatsapp, messageClient, telIntl, fenetre, telecharger, TYPES_PIECE, PAIEMENTS_ACHAT };
 })();

@@ -45,6 +45,11 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`),
 - **Dépôt vente** (onglet à part, `depotvente.js`) : En stock / Réservés / Vendus (+ À compléter). Nouveau dépôt en 4 étapes :
   client, véhicule, prix et commission (validable dès cette étape), documents (CNI, carte grise, justificatif de domicile, RIB),
   téléversés ou photographiés l'un après l'autre sur téléphone (`scan.js`, lecture automatique Tesseract chargée à la demande).
+- **Administratif** (`administratif.js`) : toute la paperasse. *À faire* (déclarations d'achat et de cession au SIV sous 15 jours,
+  CT de moins de 6 mois, factures à éditer, mandats qui expirent, reversements, W garage et assurance qui arrivent à échéance),
+  *Véhicules* (dossier de chaque véhicule : livre de police, cession, déclaration d'achat, CT, bon de commande, facture),
+  *Registres* (livre de police, factures et export comptable, mandats) et *Garage* (habilitations, échéances, documents du garage).
+  Champs ajoutés : `daSiv`, `cessionSiv`, `ctDate` sur les véhicules, `parametres.administratif` pour le garage. Pas de SQL à lancer.
 
 ## Réseau Ocaz (apporteurs d'affaires et leads)
 

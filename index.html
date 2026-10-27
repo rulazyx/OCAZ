@@ -56,6 +56,7 @@
     <button data-tab="stock">Stock</button>
     <button data-tab="reprises">Reprise</button>
     <button data-tab="depot">Dépôt vente</button>
+    <button data-tab="administratif">Administratif</button>
   </nav>
   <a id="btn-admin" class="espace-bascule" href="admin" title="Revenir à l'administration" hidden>⇄ Admin</a>
   <a id="btn-espace" class="espace-bascule" href="apporteur" title="Passer à mon espace apporteur d'affaires" hidden>⇄ Apporteur</a>
@@ -82,14 +83,6 @@
       <label class="button">Choisir un logo<input id="logo-input" type="file" accept="image/*" hidden></label>
       <button type="button" id="btn-logo-suppr" class="chip">Retirer</button></div>
     <div class="grid p-verrouille" id="p-garage"></div>
-  </section>
-  <section class="panneau">
-    <h2>Documents</h2>
-    <p class="muted">RIB, Kbis, assurance… rangés en ligne, visibles uniquement par ton équipe. Télécharge-les ou envoie-les par mail en un clic.</p>
-    <div id="p-docs" class="p-docs"></div>
-    <div class="inline doc-ajout" id="doc-ajout"><select id="doc-type" aria-label="Type de document"></select>
-      <label class="button primary">+ Ajouter un document<input id="doc-input" type="file" accept="application/pdf,image/*" hidden></label></div>
-    <span class="hint" id="doc-info"></span>
   </section>
   <section class="panneau">
     <h2>Révisions</h2>
@@ -146,6 +139,17 @@
   </section>
   </div>
 </section>
+<section id="page-administratif">
+  <div id="adm"></div>
+  <section class="panneau" id="adm-docs" hidden>
+    <h2>Documents du garage</h2>
+    <p class="muted">RIB, Kbis, assurance… rangés en ligne, visibles uniquement par ton équipe. Télécharge-les ou envoie-les par mail en un clic.</p>
+    <div id="p-docs" class="p-docs"></div>
+    <div class="inline doc-ajout" id="doc-ajout"><select id="doc-type" aria-label="Type de document"></select>
+      <label class="button primary">+ Ajouter un document<input id="doc-input" type="file" accept="application/pdf,image/*" hidden></label></div>
+    <span class="hint" id="doc-info"></span>
+  </section>
+</section>
 </main>
 
 <nav id="bottom-tabs">
@@ -155,6 +159,7 @@
   <button data-tab="stock">Stock</button>
   <button data-tab="reprises">Reprise</button>
   <button data-tab="depot">Dépôt vente</button>
+  <button data-tab="administratif">Administratif</button>
 </nav>
 
 <dialog id="dlg">
@@ -363,6 +368,7 @@
 <script src="revision.js"></script>
 <script src="import.js"></script>
 <script src="donnees.js"></script>
+<script src="administratif.js"></script>
 <script src="demo.js"></script>
 <script src="app.js"></script>
 </body>

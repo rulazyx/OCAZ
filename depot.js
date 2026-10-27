@@ -119,6 +119,12 @@ const Depot = (() => {
       </div>`;
   }
 
+  // Bouton de la fiche véhicule : on redessine sa rubrique (ailleurs, comme dans Administratif, la page se redessine seule).
+  function majSection(b, id) {
+    const zone = b.closest('.depot-info');
+    if (zone) zone.outerHTML = section(db.get('vehicules', id)).replace(/^[\s\S]*?<\/h3>/, '');
+  }
+
   function init() {
     document.addEventListener('click', e => {
       const b = e.target.closest('[data-depot]');
@@ -132,14 +138,14 @@ const Depot = (() => {
         const d = new Date(finMandat(v) + 'T12:00'); d.setDate(d.getDate() + num(reglages().dureeMandat));
         db.upsert('vehicules', { id: v.id, mandatFin: isoLocal(d) });
         toast('Mandat prolongé jusqu\'au ' + dateFr(isoLocal(d)));
-        b.closest('.depot-info').outerHTML = section(db.get('vehicules', v.id)).replace(/^[\s\S]*?<\/h3>/, '');
+        majSection(b, v.id);
       } else if (a === 'reverse') {
         const moyen = prompt('Moyen de reversement (virement, chèque…) :', 'Virement');
         if (moyen === null) return;
         db.upsert('vehicules', { id: v.id, reversement: { ...v.reversement, fait: true, le: today(), moyen } });
         db.all('planning').filter(r => r.vehiculeId === v.id && !r.fait && /^Reverser/.test(r.notes || '')).forEach(r => db.upsert('planning', { id: r.id, fait: true }));
         toast('Reversement enregistré');
-        b.closest('.depot-info').outerHTML = section(db.get('vehicules', v.id)).replace(/^[\s\S]*?<\/h3>/, '');
+        majSection(b, v.id);
       }
     });
   }
