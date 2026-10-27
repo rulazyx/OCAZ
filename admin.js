@@ -13,6 +13,12 @@
     ['codePostal', 'Code postal'], ['ville', 'Ville'], ['telephone', 'Téléphone', '', 'tel'], ['email', 'Email affiché sur les documents', '', 'email'], ['site', 'Site web', 'full']];
   const DROITS = [['reseau', 'Rejoindre le réseau Ocaz', 'Ses véhicules sont partagés avec les apporteurs et sur le site du réseau ; il reçoit des leads.'],
     ['depot', 'Dépôt-vente', 'Onglet « Dépôt vente ».'], ['achat', 'Achat-revente', 'Onglet « Reprise » et stock de véhicules achetés.']];
+  // Abonnement revendeur : suivi à la main en attendant Stripe. Premier mois offert, sans engagement.
+  const PRIX = 69.99;
+  const ABO = { essai: ['Essai gratuit', 'b-orange'], actif: ['Abonné', 'b-green'], impaye: ['Impayé', 'b-red'], resilie: ['Résilié', 'b-grey'], offert: ['Offert', 'b-purple'] };
+  const auj = () => new Date().toISOString().slice(0, 10);
+  const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
+  const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   const PACKS = [{ id: 'demarches', nom: 'Démarches administratives', montant: 150, coche: true }, { id: 'protection', nom: 'Protection de peinture', montant: 250, coche: false }];
   const APP = [['prenom', 'Prénom *'], ['nom', 'Nom *'], ['telephone', 'Téléphone', '', 'tel'], ['adresse', 'Adresse', 'full'], ['code_postal', 'Code postal'], ['ville', 'Ville'],
     ['siret', 'SIRET (14 chiffres)'], ['raison_sociale', 'Nom de la société'], ['tva', 'N° de TVA'], ['iban', 'IBAN', 'full'], ['bic', 'BIC'], ['titulaire', 'Titulaire du compte']];
@@ -75,11 +81,23 @@
     const comptes = g.comptes || [];
     return `<button type="button" class="card" data-rev="${esc(g.id)}">
       <div class="top"><span class="title">${esc(g.nom)}</span>
-        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${c.droits ? '' : '<span class="badge b-purple">Droits à régler</span>'}</span></div>
+        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${c.droits ? '' : '<span class="badge b-purple">Droits à régler</span>'}${badgeAbo(g)}</span></div>
       <div class="sub">${esc([i.ville, i.telephone, i.siret && 'SIRET ' + i.siret].filter(Boolean).join(' · ') || 'Infos à compléter')}</div>
       <div class="sub">${esc(comptes.map(x => x.email).join(', ') || 'Aucun compte')}${comptes.some(x => x.doit_changer_mdp) ? ' · mot de passe de départ' : ''}</div>
       <div class="adm-droits">${DROITS.map(([k, l]) => `<span class="badge ${d[k] ? 'b-green' : 'b-grey off'}">${l.replace('Rejoindre le réseau Ocaz', 'Réseau Ocaz')}</span>`).join('')}</div>
     </button>`;
+  }
+  function badgeAbo(g) {
+    if (g.demo || g.admin) return '';
+    const a = g.config?.abonnement;
+    if (!a?.statut) return '<span class="badge b-purple">Abonnement à régler</span>';
+    const [l, cls] = ABO[a.statut] || ABO.essai;
+    return `<span class="badge ${cls}">${l}${a.statut === 'essai' && a.debut ? " jusqu'au " + dateFr(finEssai(a.debut)) : ''}</span>`;
+  }
+  function resumeAbo() {
+    const n = st => revendeurs.filter(g => !g.demo && !g.admin && g.config?.abonnement?.statut === st).length;
+    const actifs = n('actif'), essais = n('essai'), impayes = n('impaye');
+    return `<p class="hint adm-abo">Abonnés : <b>${actifs}</b> · revenu mensuel : <b>${eur(actifs * PRIX)}</b>${essais ? ` · ${essais} en essai (+${eur(essais * PRIX)} s'ils restent)` : ''}${impayes ? ` · <b>${impayes} impayé(s)</b>` : ''} · objectif : 30 abonnés</p>`;
   }
   function carteApporteur(a) {
     return `<button type="button" class="card" data-app="${esc(a.email)}">
@@ -101,6 +119,7 @@
         <button type="button" data-vue="revendeurs" class="${vue === 'revendeurs' ? 'active' : ''}">Revendeurs (${revendeurs.length})</button>
         <button type="button" data-vue="apporteurs" class="${vue === 'apporteurs' ? 'active' : ''}">Apporteurs (${apporteurs.length})</button></div>
         <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher…" value="${esc(q)}" autocomplete="off"></div></div>
+      ${vue === 'revendeurs' ? resumeAbo() : ''}
       <div class="adm-liste">${liste.length ? liste.map(vue === 'revendeurs' ? carteRevendeur : carteApporteur).join('')
         : `<div class="empty"><strong>${q ? 'Aucun résultat' : vue === 'revendeurs' ? 'Aucun revendeur' : 'Aucun apporteur'}</strong><span>${q ? 'Essaie une autre recherche.' : 'Ajoute le premier avec le bouton ci-dessus.'}</span></div>`}</div>
     </div>`;
@@ -112,7 +131,8 @@
     const c = g?.config || {};
     rev = { id: g?.id || null, infos: { ...(c.infos || {}), nom: c.infos?.nom || g?.nom || '' }, droits: { ...droitsDe(g ? c : { droits: { reseau: false, depot: false, achat: true } }) },
       reseau: { commissionType: 'fixe', commissionValeur: 300, commissionMin: 0, ...(c.reseau || {}) },
-      packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo };
+      packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo, admin: !!g?.admin,
+      abonnement: { statut: 'essai', debut: auj(), ...(c.abonnement || {}) } };
     $('#rev-titre').textContent = g ? g.nom : 'Ajouter un revendeur';
     rendreRevendeur();
     $('#dlg-rev').showModal();
@@ -131,6 +151,13 @@
         ${r.demo ? '' : `<div class="field"><label for="rev-email">Ajouter un compte (email)</label><input id="rev-email" type="email" autocomplete="off" placeholder="collegue@garage.re" value="${esc(r.email || '')}"></div>`}</div>`
       : `<div class="field"><label for="rev-email">Email de connexion *</label><input id="rev-email" type="email" autocomplete="off" placeholder="contact@garage.re" value="${esc(r.email || '')}">
           <span class="hint">Il se connecte avec cet email et le mot de passe <b>12345678</b>, puis choisit le sien.</span></div>`}
+
+      ${r.demo || r.admin ? '' : `<h3 class="section">Abonnement (${eur(PRIX)} par mois)</h3>
+      <p class="hint">Premier mois offert, sans engagement. À mettre à jour à la main pour l'instant (Stripe le fera tout seul plus tard).</p>
+      <div class="grid"><div class="field"><label for="abo-statut">Statut</label><select id="abo-statut">
+          ${Object.entries(ABO).map(([k, [l]]) => `<option value="${k}"${r.abonnement.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="abo-debut">Début de l'abonnement</label><input id="abo-debut" type="date" value="${esc(r.abonnement.debut)}">
+          <span class="hint">Fin de l'essai : ${dateFr(finEssai(r.abonnement.debut))}, premier paiement ce jour-là.</span></div></div>`}
 
       <h3 class="section">Droits activés</h3>
       <div class="adm-bloc">${DROITS.map(([k, l, aide]) => `<label class="check"><input type="checkbox" data-droit="${k}"${r.droits[k] ? ' checked' : ''}><span><b>${l}</b><br><small class="hint">${aide}</small></span></label>
@@ -153,6 +180,7 @@
   }
   function lireRevendeur() {
     rev.email = ($('#rev-email')?.value || '').trim().toLowerCase();
+    if ($('#abo-statut')) rev.abonnement = { ...rev.abonnement, statut: $('#abo-statut').value, debut: $('#abo-debut').value || auj() };
     document.querySelectorAll('#rev-body [data-ri]').forEach(i => { rev.infos[i.dataset.ri] = i.value.trim(); });
     document.querySelectorAll('#rev-body [data-droit]').forEach(i => { rev.droits[i.dataset.droit] = i.checked; });
     document.querySelectorAll('#rev-body [data-rc]').forEach(i => { rev.reseau[i.dataset.rc] = i.dataset.rc === 'commissionType' ? i.value : Number(i.value) || 0; });
@@ -169,6 +197,7 @@
     if (rev.infos.siret && !/^\d{14}$/.test(rev.infos.siret.replace(/\s/g, ''))) { toast('Le SIRET doit faire 14 chiffres.'); return; }
     if (rev.packs.some(p => !p.nom)) { toast('Donne un nom à chaque pack (ou supprime-le).'); return; }
     const config = { infos: rev.infos, droits: rev.droits, reseau: rev.reseau, packs: rev.packs };
+    if (!rev.demo && !rev.admin) config.abonnement = rev.abonnement;
     const btn = $('#rev-ok');
     btn.disabled = true;
     try {
@@ -266,6 +295,7 @@
     });
     $('#rev-body').addEventListener('change', e => {
       if (e.target.dataset.droit === 'reseau') $('#rev-com').hidden = !e.target.checked;
+      if (e.target.id === 'abo-debut') { lireRevendeur(); rendreRevendeur(); }
     });
     $('#rev-body').addEventListener('click', async e => {
       if (e.target.id === 'rev-pack-ajouter') { lireRevendeur(); rev.packs.push({ id: nouvelId(), nom: '', montant: '', coche: false }); rendreRevendeur(); return; }
