@@ -1,6 +1,6 @@
-// Espace apporteur d'affaires du réseau Ocaz (accès gratuit) : inscription avec le contrat signé en ligne,
-// suivi des leads envoyés aux garages, chiffres (commissions, ventes, taux de transformation), choix d'un véhicule
-// du réseau pour transmettre un client, et paramètres (infos, RIB, factures de commission, contrat).
+// Espace apporteur d'affaires du réseau Ocaz (accès gratuit) : compte créé par l'administrateur, contrat signé en ligne
+// à la première connexion, suivi des leads envoyés aux garages, chiffres (commissions, ventes, taux de transformation),
+// choix d'un véhicule du réseau pour transmettre un client, et paramètres (téléphone, RIB, contrat, factures).
 (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -16,7 +16,6 @@
     nouveau: ['Envoyé au garage', 'b-orange'], en_cours: ['Pris en charge', 'b-blue'], vendu: ['Vendu', 'b-green'], perdu: ['Clos', 'b-grey'],
   };
   const VUES = { 'En cours': ['nouveau', 'en_cours'], Clos: ['perdu'], 'Terminés': ['vendu'] };
-  const CHAMPS = ['prenom', 'nom', 'telephone', 'adresse', 'code_postal', 'ville', 'siret', 'raison_sociale', 'tva', 'iban', 'bic', 'titulaire'];
 
   let client = null, user = null, moi = null;
   let garages = [], leads = [], urls = new Map();
@@ -66,27 +65,28 @@
     if (texte) $('#auth-texte').textContent = texte;
   }
   // Une seule connexion pour tout Ocaz : la page de connexion est l'accueil (./?espace=apporteur).
-  // Ici on n'arrive que connecté (ou pour s'inscrire) ; un compte garage sans espace apporteur repart vers son garage.
+  // Ici on n'arrive que connecté ; un compte garage sans espace apporteur repart vers son garage.
   const preferer = e => { try { localStorage.setItem('ocaz-espace', e); } catch (err) { /* rien */ } };
   const versConnexion = () => location.replace('./?espace=apporteur');
-  const inscription = new URLSearchParams(location.search).has('inscription') || location.hash === '#inscription';
   async function demarrer() {
     try {
       const m = await rpc('crm_apporteur_moi');
-      if (!m) {
-        // Compte garage qui veut aussi devenir apporteur : même compte, il signe juste le contrat.
-        if (inscription) { activation(); return; }
-        preferer('garage'); location.replace('./'); return;
-      }
+      if (!m) { preferer('garage'); location.replace('./'); return; }
       // Compte aussi garage : bouton pour passer à l'espace garage.
       client.rpc('crm_moi').then(({ data }) => { $('#btn-espace').hidden = !data?.role; }, () => {});
       moi = m;
+      // Mot de passe de départ (compte créé par l'administrateur) : à remplacer avant tout.
+      if (moi.doit_changer_mdp && !moi.demo) { verrou(true); $('#n-mdp').focus(); return; }
       verrou(false);
+      if (!moi.contrat_signe_le && !moi.demo) { onglet = 'parametres'; toast('Bienvenue ! Signe ton contrat d\'apporteur pour commencer.'); }
       if (moi.statut !== 'actif') toast('Ton compte est suspendu : contacte Ocaz.');
       await Promise.all([chargerReseau(), chargerLeads()]);
       ecouter();
       afficher(onglet);
-    } catch (err) { verrou(true); erreur(err.message); }
+    } catch (err) {
+      verrou(false);
+      $('#vue').innerHTML = `<div class="empty"><strong>Connexion impossible</strong><span>${esc(err.message)}</span></div>`;
+    }
   }
   async function chargerReseau() {
     if (moi?.statut !== 'actif') { garages = []; return; }
@@ -292,14 +292,15 @@
   function vueParametres() {
     const vendus = leads.filter(x => x.lead.statut === 'vendu');
     const ch = (k, l, cls = '', type = 'text') => `<div class="field ${cls}"><label for="p-${k}">${l}</label><input id="p-${k}" data-p="${k}" type="${type}"></div>`;
+    const fixe = (l, v, cls = '') => `<div class="field ${cls}"><label>${l}</label><input value="${esc(v || '')}" disabled></div>`;
+    const signe = !!moi.contrat_signe_le;
     return `<div class="parametres ap-param"><div class="p-col">
       <section class="panneau"><h2>Mes infos</h2>
-        <p class="muted">Elles figurent sur tes factures de commission. Le garage d'un lead voit ton nom et ton téléphone.</p>
-        <div class="grid">${ch('prenom', 'Prénom')}${ch('nom', 'Nom')}${ch('telephone', 'Téléphone', '', 'tel')}
-          <div class="field"><label>Email</label><input value="${esc(moi.email)}" disabled></div>
-          ${ch('adresse', 'Adresse', 'full')}${ch('code_postal', 'Code postal')}${ch('ville', 'Ville')}
-          <div class="field"><label for="p-forme">Statut</label><select id="p-forme">${Object.entries(Commission.FORMES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
-          ${ch('siret', 'SIRET (14 chiffres)')}${ch('raison_sociale', 'Nom de la société')}${ch('tva', 'N° de TVA (si assujetti)')}</div>
+        <p class="muted">Elles figurent sur tes factures de commission. Pour changer ton nom, ton adresse ou ton SIRET,
+          <a href="mailto:contact@ocaz.re?subject=Modifier%20mes%20infos%20apporteur">contacte l'administrateur</a>.</p>
+        <div class="grid">${fixe('Prénom', moi.prenom)}${fixe('Nom', moi.nom)}${ch('telephone', 'Téléphone', '', 'tel')}${fixe('Email', moi.email)}
+          ${fixe('Adresse', [moi.adresse, moi.code_postal, moi.ville].filter(Boolean).join(' '), 'full')}
+          ${fixe('Statut', Commission.FORMES[moi.forme])}${fixe('SIRET', moi.siret)}</div>
       </section>
       <section class="panneau"><h2>Mon RIB</h2>
         <p class="muted">Montré seulement au garage d'une vente conclue, pour qu'il te verse ta commission.</p>
@@ -307,15 +308,21 @@
         <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-p-save" class="primary">Enregistrer</button></div>
       </section></div>
       <div class="p-col">
+      <section class="panneau"><h2>Mon contrat</h2>
+        ${signe ? `<p class="muted">Contrat d'apporteur d'affaires du réseau Ocaz, signé en ligne le ${dateFr(moi.contrat_signe_le)} (« ${esc(moi.signature)} »).</p>
+          <button type="button" id="btn-contrat">Voir / imprimer mon contrat</button>`
+        : `<p class="muted">Lis le contrat d'apporteur d'affaires du réseau Ocaz, puis signe-le en tapant ton prénom et ton nom.</p>
+          <div class="ap-contrat" tabindex="0">${Commission.contratHtml()}</div>
+          <label class="check"><input type="checkbox" id="s-accepte"><span>J'ai lu le contrat et je l'accepte, ainsi que les <a href="https://ocaz.re/cgu" target="_blank">CGU</a> et la <a href="https://ocaz.re/confidentialite" target="_blank">politique de confidentialité</a>.</span></label>
+          <label class="check"><input type="checkbox" id="s-certifie"><span>Je déclarerai moi-même mes commissions (URSSAF, impôts).</span></label>
+          <div class="field"><label for="s-signature">Signature : prénom et nom</label><input id="s-signature" autocomplete="name"></div>
+          <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-signer" class="primary">Signer le contrat</button></div>`}
+      </section>
       <section class="panneau"><h2>Mes factures de commission</h2>
         <p class="muted">Une facture par vente, numérotée automatiquement. Envoie-la au garage (PDF) ; il te paie par virement.</p>
         ${vendus.length ? `<div class="souffrance">${vendus.map(x => `<button type="button" class="souf" data-facture="${x.lead.id}"><span><strong>${esc(x.lead.facture_numero)} · ${euros(x.lead.commission_finale)}</strong>
           <small>${esc(x.garage?.nom || '')} · ${esc(x.lead.vehicule)} · ${dateFr(x.lead.vendu_le)}</small></span><span class="badge ${x.lead.payee ? 'b-green' : 'b-orange'}">${x.lead.payee ? 'Payée' : 'À recevoir'}</span></button>`).join('')}</div>`
           : '<p class="hint">Ta première facture apparaîtra ici dès qu\'un garage marquera une vente.</p>'}
-      </section>
-      <section class="panneau"><h2>Mon contrat</h2>
-        <p class="muted">Contrat d'apporteur d'affaires du réseau Ocaz, signé en ligne le ${dateFr(moi.contrat_signe_le)} (« ${esc(moi.signature)} »).</p>
-        <button type="button" id="btn-contrat">Voir / imprimer mon contrat</button>
       </section>
       <section class="panneau"><h2>Compte</h2>
         <p class="hint">Connecté : ${esc(moi.email)}${moi.demo ? ' · compte de démo' : ''}</p>
@@ -328,13 +335,19 @@
   }
   function remplirParametres() {
     document.querySelectorAll('[data-p]').forEach(el => { el.value = moi[el.dataset.p] || ''; });
-    $('#p-forme').value = moi.forme;
     $('#btn-p-save').addEventListener('click', async () => {
-      const infos = { forme: $('#p-forme').value };
+      const infos = {};
       document.querySelectorAll('[data-p]').forEach(el => { infos[el.dataset.p] = el.value.trim(); });
       try { moi = await rpc('crm_apporteur_maj', { p_infos: infos }); toast('Infos enregistrées'); afficher('parametres'); } catch (err) { toast(err.message); }
     });
-    $('#btn-contrat').addEventListener('click', () => { if (!Commission.imprimerContrat(moi)) toast("Autorise l'ouverture de fenêtres pour imprimer."); });
+    $('#btn-contrat')?.addEventListener('click', () => { if (!Commission.imprimerContrat(moi)) toast("Autorise l'ouverture de fenêtres pour imprimer."); });
+    $('#btn-signer')?.addEventListener('click', async () => {
+      const signature = $('#s-signature').value.trim();
+      if (!$('#s-accepte').checked || !$('#s-certifie').checked) { toast('Coche les deux cases du contrat.'); return; }
+      if (!signature) { toast('Signe en tapant ton prénom et ton nom.'); return; }
+      try { moi = await rpc('crm_apporteur_signer', { p_contrat: Commission.VERSION, p_signature: signature }); toast('Contrat signé : bienvenue dans le réseau Ocaz !'); afficher('reseau'); }
+      catch (err) { toast(err.message); }
+    });
     $('#btn-sortir').addEventListener('click', deconnecter);
     $('#btn-mdp')?.addEventListener('click', async () => {
       const m1 = $('#m-1').value;
@@ -359,54 +372,21 @@
     versConnexion();
   }
 
-  // ---------- Inscription ----------
-  // Déjà connecté (compte garage) : pas d'email ni de mot de passe à créer, seulement les infos et le contrat.
-  function activation() {
-    document.querySelectorAll('[data-nouveau-compte]').forEach(el => { el.hidden = true; });
-    $('#auth-texte').textContent = `Ouvre ton espace apporteur avec ton compte ${user.email} : remplis tes infos et signe le contrat.`;
-    $('#i-ok').textContent = 'Signer et ouvrir mon espace apporteur';
-    $('#auth-sortir').hidden = false;
-    verrou(true);
-  }
-  function majForme() {
-    const f = document.querySelector('[name="forme"]:checked').value;
-    $('#i-champ-siret').hidden = f === 'en_cours';
-    $('#i-champ-rs').hidden = f !== 'societe';
-    $('#i-champ-tva').hidden = f !== 'societe';
-  }
-  async function inscrire(e) {
+  // ---------- Mot de passe de départ ----------
+  async function nouveauMdp(e) {
     e.preventDefault();
-    const infos = { forme: document.querySelector('[name="forme"]:checked').value };
-    document.querySelectorAll('[data-i]').forEach(el => { infos[el.dataset.i] = el.value.trim(); });
-    const email = $('#i-email').value.trim().toLowerCase(), mdp = $('#i-mdp').value;
-    const connecte = !!user;
-    if (!infos.prenom || !infos.nom || !infos.telephone) { erreur('Prénom, nom et téléphone sont obligatoires.'); return; }
-    if (!connecte && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { erreur('Email invalide.'); return; }
-    if (infos.forme !== 'en_cours' && !/^\d{14}$/.test(infos.siret.replace(/\s/g, ''))) { erreur('Le SIRET doit faire 14 chiffres (ou choisis « Immatriculation en cours »).'); return; }
-    if (!$('#i-accepte').checked || !$('#i-certifie').checked) { erreur('Coche les deux cases du contrat.'); return; }
-    if (!$('#i-signature').value.trim()) { erreur('Signe en tapant ton prénom et ton nom.'); return; }
-    if (!connecte && mdp.length < 8) { erreur('Le mot de passe doit faire au moins 8 caractères.'); return; }
-    if (!connecte && mdp !== $('#i-mdp2').value) { erreur('Les deux mots de passe ne sont pas identiques.'); return; }
-    const btn = $('#i-ok');
-    btn.disabled = true; btn.textContent = 'Création du compte…';
+    const m1 = $('#n-mdp').value;
+    if (m1.length < 8) { erreur('Le mot de passe doit faire au moins 8 caractères.'); return; }
+    if (m1 === '12345678') { erreur('Choisis un mot de passe différent de celui de départ.'); return; }
+    if (m1 !== $('#n-mdp2').value) { erreur('Les deux mots de passe ne sont pas identiques.'); return; }
     erreur('');
-    try {
-      const signature = $('#i-signature').value.trim();
-      onglet = 'reseau';
-      if (connecte) {
-        await rpc('crm_apporteur_activer', { p_infos: infos, p_contrat: Commission.VERSION, p_signature: signature });
-        preferer('apporteur');
-        await demarrer();
-      } else {
-        await rpc('crm_apporteur_inscription', { p_email: email, p_mdp: mdp, p_infos: infos, p_contrat: Commission.VERSION, p_signature: signature });
-        try { localStorage.setItem('crmzx-rester', '1'); } catch (err) { /* rien */ }
-        const { error } = await client.auth.signInWithPassword({ email, password: mdp });
-        if (error) throw new Error(error.message);
-      }
-      toast('Bienvenue dans le réseau Ocaz !');
-    } catch (err) { erreur(err.message); }
-    finally { btn.disabled = false; btn.textContent = 'Signer et créer mon compte'; }
+    const { error } = await client.auth.updateUser({ password: m1 });
+    if (error) { erreur(error.message); return; }
+    try { await rpc('crm_apporteur_mdp_change'); } catch (err) { /* base pas à jour */ }
+    toast('Mot de passe enregistré');
+    await demarrer();
   }
+
   // ---------- Démarrage ----------
   function init() {
     document.querySelectorAll('[data-tab]').forEach(b => {
@@ -417,9 +397,7 @@
     // Paramètres : icône en haut à droite de l'en-tête, comme chez les garages.
     $('#btn-menu').innerHTML = icon('reglages', 20);
     $('#btn-menu').addEventListener('click', () => afficher('parametres'));
-    $('#i-contrat').innerHTML = Commission.contratHtml();
-    document.querySelectorAll('[name="forme"]').forEach(r => r.addEventListener('change', majForme));
-    $('#f-inscription').addEventListener('submit', inscrire);
+    $('#f-mdp').addEventListener('submit', nouveauMdp);
     $('#auth-sortir').addEventListener('click', deconnecter);
     $('#btn-espace').addEventListener('click', () => preferer('garage'));
     $('#f-lead').addEventListener('submit', envoyerLead);
@@ -443,10 +421,8 @@
       $('#vue .ap-grille').replaceWith(tmp.querySelector('.ap-grille'));
       $('#vue .ap-tete .muted').textContent = `${vehicules().length} véhicule(s)`;
     });
-    majForme();
-
     const s = reglages();
-    if (!s.url || !s.cle || !window.supabase) { verrou(true, "Le réseau Ocaz n'est pas joignable pour le moment. Réessaie plus tard."); return; }
+    if (!s.url || !s.cle || !window.supabase) { versConnexion(); return; }
     client = window.supabase.createClient(s.url, s.cle, { auth: { persistSession: true, detectSessionInUrl: false, storage: stockage } });
     client.auth.onAuthStateChange((event, session) => {
       const avant = user;
@@ -455,7 +431,7 @@
     });
     client.auth.getSession().then(({ data }) => {
       user = data.session?.user || null;
-      if (user) demarrer(); else if (inscription) verrou(true); else versConnexion();
+      if (user) demarrer(); else versConnexion();
     });
   }
   init();

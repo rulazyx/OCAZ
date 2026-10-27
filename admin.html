@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ocaz Pro | Administration</title>
+<!-- Appli réservée aux pros : jamais référencée (voir aussi robots.txt). -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="theme-color" content="#0d0f12">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="marque.css">
+<link rel="stylesheet" href="apporteur.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body class="ap admin verrouille">
+<div id="auth">
+  <div class="auth-carte ap-carte">
+    <img src="logo.svg" alt="" width="64" height="64">
+    <h1><span class="brand-name">OCAZ</span> <span class="ap-marque">Admin</span></h1>
+    <p class="muted" id="auth-texte">Connexion…</p>
+  </div>
+</div>
+
+<header>
+  <div class="brand"><img src="logo.svg" alt="" width="34" height="34"><span class="brand-name">OCAZ</span><span class="ap-marque">Admin</span></div>
+  <nav id="tabs">
+    <button data-tab="commercial" class="active">Commercial</button>
+  </nav>
+  <a id="btn-garage" class="espace-bascule" href="./" title="Ouvrir mon garage dans l'appli">⇄ Garage</a>
+  <button id="btn-menu" class="ghost" title="Mon compte" aria-label="Mon compte"></button>
+</header>
+
+<main>
+  <div id="vue"></div>
+</main>
+
+<dialog id="dlg-rev" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="rev-titre">Ajouter un revendeur</h2>
+      <button type="button" id="rev-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <div class="o-body" id="rev-body"></div>
+    <div class="actions o-actions"><span class="spacer"></span>
+      <button type="button" id="rev-annuler">Annuler</button>
+      <button type="button" id="rev-ok" class="primary">Enregistrer</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-app" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="app-titre">Ajouter un apporteur</h2>
+      <button type="button" id="app-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <div class="o-body" id="app-body"></div>
+    <div class="actions o-actions"><span class="spacer"></span>
+      <button type="button" id="app-annuler">Annuler</button>
+      <button type="button" id="app-ok" class="primary">Enregistrer</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-compte">
+  <div style="padding:20px">
+    <h2>Mon compte</h2>
+    <p class="hint" id="compte-email"></p>
+    <div class="stack">
+      <input id="m-1" type="password" placeholder="Nouveau mot de passe (8 caractères min.)" autocomplete="new-password">
+      <input id="m-2" type="password" placeholder="Confirme le mot de passe" autocomplete="new-password">
+      <button type="button" id="btn-mdp" class="primary">Changer mon mot de passe</button>
+      <button type="button" id="btn-sortir">Se déconnecter</button>
+      <button type="button" id="compte-fermer">Fermer</button>
+    </div>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="icons.js"></script>
+<script src="commission.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

@@ -33,7 +33,7 @@
     <p id="auth-erreur" class="auth-erreur" role="alert" hidden></p>
     <button type="submit" id="auth-ok" class="primary">Se connecter</button>
     <p class="hint auth-aide" id="auth-aide">Mot de passe oublié ? Demande à ton administrateur de le réinitialiser.</p>
-    <p class="hint auth-aide" id="auth-devenir">Pas encore apporteur ? <a href="apporteur?inscription">Devenir apporteur (gratuit)</a><br>Démo : <b>test</b> / <b>test</b> (garage) ou <b>apporteur</b> / <b>test</b>.</p>
+    <p class="hint auth-aide" id="auth-devenir">Démo : <b>revendeur</b> / <b>test</b> ou <b>apporteur</b> / <b>test</b>.</p>
     <button type="button" id="auth-sortir" class="lien" hidden>Se déconnecter</button>
     <details id="auth-config" hidden><summary>Réglages techniques</summary>
       <div class="stack" style="margin-top:8px">
@@ -55,7 +55,9 @@
     <button data-tab="leads">Leads</button>
     <button data-tab="stock">Stock</button>
     <button data-tab="reprises">Reprise</button>
+    <button data-tab="depot">Dépôt vente</button>
   </nav>
+  <a id="btn-admin" class="espace-bascule" href="admin" title="Revenir à l'administration" hidden>⇄ Admin</a>
   <a id="btn-espace" class="espace-bascule" href="apporteur" title="Passer à mon espace apporteur d'affaires" hidden>⇄ Apporteur</a>
   <button id="sync-pill" class="sync-pill" hidden></button>
   <button id="btn-menu" class="ghost" title="Paramètres" aria-label="Paramètres"></button>
@@ -74,113 +76,20 @@
   <div class="p-col">
   <section class="panneau">
     <h2>Mon garage</h2>
-    <p class="muted">Ces infos apparaissent sur l'accueil et sur les offres imprimées.</p>
+    <p class="muted">Ces infos apparaissent sur les offres et les documents imprimés. Elles sont fixées par Ocaz : pour les modifier,
+      <a href="mailto:contact@ocaz.re?subject=Modifier%20les%20infos%20de%20mon%20garage">contacte l'administrateur</a>. Tu peux changer ton logo.</p>
     <div class="p-logo-zone"><div id="p-logo" class="p-logo"></div>
       <label class="button">Choisir un logo<input id="logo-input" type="file" accept="image/*" hidden></label>
       <button type="button" id="btn-logo-suppr" class="chip">Retirer</button></div>
-    <div class="grid" id="p-garage"></div>
-    <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-save-garage" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Vitrine en ligne</h2>
-    <p class="muted">Une page publique avec tes véhicules disponibles, photos et prix. Le vendu disparaît tout seul. Les visiteurs te contactent par WhatsApp ou par un formulaire qui arrive dans l'accueil.</p>
-    <div class="field"><label for="vit-slug">Adresse de ta vitrine</label><input id="vit-slug" autocomplete="off" spellcheck="false" placeholder="garage-payet-auto"></div>
-    <label class="check" style="margin-top:6px"><input type="checkbox" id="vit-actif"><span>Vitrine en ligne (visible par tout le monde)</span></label>
-    <div class="vit-lien" id="vit-lien"></div>
-    <div class="install-qr"><div id="vit-qr"></div><span class="hint" id="vit-etat"></span></div>
-    <details class="vit-integrer" id="vit-integrer" hidden>
-      <summary>Mettre la vitrine sur le site de mon garage</summary>
-      <p class="hint">Tes véhicules s'affichent directement dans une page de ton site, toujours à jour. Choisis selon ton site :</p>
-      <h4>WordPress, ou tout site où l'on peut coller du code HTML</h4>
-      <ol class="hint"><li>Ouvre la page « Nos véhicules » de ton site en modification.</li>
-        <li>WordPress : ajoute un bloc <b>HTML personnalisé</b>. Autres sites : un bloc « Code » ou « HTML ».</li>
-        <li>Colle ce code, puis publie la page.</li></ol>
-      <textarea id="vit-code" class="vit-code" readonly rows="3"></textarea>
-      <button type="button" id="btn-vit-code">Copier le code</button>
-      <h4>Wix, Google Sites, Jimdo</h4>
-      <ol class="hint"><li>Wix : <b>Ajouter</b> &gt; <b>Intégrer du code</b> &gt; <b>Intégrer un site</b>. Google Sites : <b>Insérer</b> &gt; <b>Intégrer</b> &gt; <b>Par URL</b>.</li>
-        <li>Colle ce lien, puis agrandis le cadre (au moins 1 200 pixels de haut) : la vitrine défile à l'intérieur.</li></ol>
-      <div class="inline"><input id="vit-lien-integre" readonly><button type="button" id="btn-vit-lien-integre">Copier</button></div>
-    </details>
-    <div class="p-actions"><button type="button" id="btn-vit-copier">Copier le lien</button>
-      <button type="button" id="vit-notif">Recevoir les alertes sur cet appareil</button><span class="spacer"></span>
-      <button type="button" id="btn-vit-save" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Réseau Ocaz</h2>
-    <p class="muted">Des apporteurs d'affaires (inscription gratuite) présentent tes véhicules à leurs contacts et t'envoient des clients prêts à acheter, qui arrivent dans l'onglet Leads. Tes véhicules partagés apparaissent aussi sur le site du réseau. Tu fixes la commission et tu la verses toi-même à l'apporteur, seulement sur les ventes conclues.</p>
-    <label class="check"><input type="checkbox" id="res-actif"><span>Rejoindre le réseau Ocaz et partager mes véhicules</span></label>
-    <p class="hint" id="res-conditions"></p>
-    <div class="grid trois" style="margin-top:6px">
-      <div class="field"><label for="res-type">Commission</label><select id="res-type"><option value="fixe">Montant fixe par vente</option><option value="pourcentage">% du prix de vente</option></select></div>
-      <div class="field"><label for="res-valeur">Montant (€) ou taux (%)</label><input id="res-valeur" type="number" inputmode="decimal"></div>
-      <div class="field" id="res-min-champ"><label for="res-min">Minimum (€)</label><input id="res-min" type="number" inputmode="decimal"></div>
-    </div>
-    <label class="check" style="margin-top:8px"><input type="checkbox" id="res-defaut"><span>Partager d'office chaque véhicule en stock (sinon, coche-les un par un dans leur fiche)</span></label>
-    <p class="hint">Dans chaque fiche véhicule : case « Partager au réseau » et commission propre au véhicule si besoin.</p>
-    <div class="field" style="margin-top:8px"><label for="res-lien">Lien d'inscription à envoyer à tes apporteurs</label>
-      <div class="inline"><input id="res-lien" readonly><button type="button" id="btn-res-copier">Copier</button></div></div>
-    <p class="hint">Toi aussi, tu veux envoyer des clients aux autres garages du réseau ? <a href="apporteur?inscription">Ouvre ton espace apporteur</a> avec ce même compte.</p>
-    <div class="p-actions"><span class="hint" id="res-etat"></span><span class="spacer"></span>
-      <button type="button" id="btn-res-save" class="primary">Enregistrer</button></div>
+    <div class="grid p-verrouille" id="p-garage"></div>
   </section>
   <section class="panneau">
     <h2>Documents</h2>
-    <p class="muted">RIB, Kbis, assurance… rangés en ligne, visibles uniquement par ton équipe.</p>
+    <p class="muted">RIB, Kbis, assurance… rangés en ligne, visibles uniquement par ton équipe. Télécharge-les ou envoie-les par mail en un clic.</p>
     <div id="p-docs" class="p-docs"></div>
     <div class="inline doc-ajout" id="doc-ajout"><select id="doc-type" aria-label="Type de document"></select>
       <label class="button primary">+ Ajouter un document<input id="doc-input" type="file" accept="application/pdf,image/*" hidden></label></div>
     <span class="hint" id="doc-info"></span>
-  </section>
-  <section class="panneau">
-    <h2>Packs livraison</h2>
-    <p class="muted">Proposés dans chaque nouvelle offre. « Par défaut » : coché d'office.</p>
-    <div id="p-packs" class="p-packs"></div>
-    <div class="p-actions"><button type="button" id="btn-pack-ajouter">+ Ajouter un pack</button><span class="spacer"></span>
-      <button type="button" id="btn-save-packs" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Carte grise</h2>
-    <p class="muted">Barème de La Réunion 2026 (moitié prix après 10 ans). Seul le montant ANTS fait foi.</p>
-    <div class="grid trois">
-      <div class="field"><label for="cg-prixCV">Prix du cheval fiscal (€)</label><input id="cg-prixCV" type="number" step="0.01" inputmode="decimal"></div>
-      <div class="field"><label for="cg-taxeFixe">Taxe fixe (€)</label><input id="cg-taxeFixe" type="number" step="0.01" inputmode="decimal"></div>
-      <div class="field"><label for="cg-acheminement">Acheminement (€)</label><input id="cg-acheminement" type="number" step="0.01" inputmode="decimal"></div>
-    </div>
-    <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-save-cg" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Activité</h2>
-    <p class="muted">Mode proposé par défaut pour chaque nouveau véhicule. Tu peux toujours choisir l'autre, véhicule par véhicule.</p>
-    <div class="field"><label for="act-mode">Je travaille surtout en</label><select id="act-mode">
-      <option value="achat">Achat-revente (reprise)</option><option value="depot">Dépôt-vente</option></select></div>
-    <h3 class="section">Dépôt-vente : conditions par défaut</h3>
-    <div class="field"><label for="act-type">Commission</label><select id="act-type"></select></div>
-    <div class="grid trois" style="margin-top:10px">
-      <div class="field"><label for="act-commissionValeur">Taux (%) ou forfait (€)</label><input id="act-commissionValeur" type="number" inputmode="decimal"></div>
-      <div class="field"><label for="act-commissionMin">Minimum (€)</label><input id="act-commissionMin" type="number" inputmode="decimal"></div>
-      <div class="field"><label for="act-dureeMandat">Durée du mandat (jours)</label><input id="act-dureeMandat" type="number" inputmode="numeric"></div>
-    </div>
-    <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-save-activite" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Facturation</h2>
-    <p class="muted">Régime de TVA proposé sur chaque facture (modifiable vente par vente). À La Réunion, le taux normal est de 8,5 %.</p>
-    <div class="field"><label for="fac-regime">Régime de TVA par défaut</label><select id="fac-regime"></select></div>
-    <div class="field" style="margin-top:10px"><label for="fac-conditions">Mentions ajoutées au bon de commande et à la facture</label>
-      <textarea id="fac-conditions" placeholder="ex. Garantie 3 mois pièces et main-d'œuvre. Forme juridique et capital (SARL au capital de …)."></textarea></div>
-    <div class="p-actions"><button type="button" id="btn-export-factures">Exporter les factures (comptable)</button><span class="spacer"></span>
-      <button type="button" id="btn-save-facture" class="primary">Enregistrer</button></div>
-  </section>
-  <section class="panneau">
-    <h2>Reprises</h2>
-    <p class="muted">Hausse des prix à La Réunion par rapport aux cotes métropole, et marge visée sur la revente.</p>
-    <div class="grid trois">
-      <div class="field"><label for="set-hausse">Hausse Réunion (%)</label><input id="set-hausse" type="number" inputmode="decimal"></div>
-      <div class="field"><label for="set-marge-min">Marge min (%)</label><input id="set-marge-min" type="number" inputmode="decimal"></div>
-      <div class="field"><label for="set-marge-max">Marge max (%)</label><input id="set-marge-max" type="number" inputmode="decimal"></div>
-    </div>
-    <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-save-reprise" class="primary">Enregistrer</button></div>
   </section>
   </div>
   <div class="p-col">
@@ -197,25 +106,6 @@
       <button type="button" id="btn-demo-reset" hidden>Remettre les données de démo à zéro</button>
       <button type="button" id="btn-deconnexion">Se déconnecter</button>
     </div>
-  </section>
-  <section class="panneau" id="superadmin" hidden>
-    <h2>Garages clients</h2>
-    <p class="muted">Crée le compte d'un garage : il se connecte avec son email et le mot de passe <strong>12345678</strong>, puis choisit le sien. Tu ne vois jamais ses données.</p>
-    <div class="grid"><div class="field"><label for="sa-nom">Nom de l'entreprise</label><input id="sa-nom" autocomplete="off"></div>
-      <div class="field"><label for="sa-email">Email</label><input id="sa-email" type="email" autocomplete="off"></div></div>
-    <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-sa-creer" class="primary">Créer le compte</button></div>
-    <div id="sa-liste" class="sa-liste"></div>
-    <h3 class="section">Apporteurs du réseau</h3>
-    <p class="hint">Ils s'inscrivent seuls (gratuit) depuis le lien d'inscription ci-dessus, avec leur statut et le contrat signé en ligne. Tu peux suspendre un compte.</p>
-    <div id="sa-apporteurs" class="sa-liste"></div>
-  </section>
-  <section class="panneau" id="equipe" hidden>
-    <h2>Équipe</h2>
-    <p class="muted">Ajoute un collègue : son compte est créé avec le mot de passe <strong>12345678</strong>, qu'il change à sa première connexion.</p>
-    <div id="equipe-liste" class="equipe-liste"></div>
-    <div class="inline"><input id="equipe-email" type="email" placeholder="email@exemple.fr" autocomplete="off">
-      <select id="equipe-role"><option value="vendeur">Vendeur</option><option value="admin">Admin</option></select>
-      <button type="button" id="btn-equipe-ajouter" class="primary">Ajouter</button></div>
   </section>
   <section class="panneau">
     <h2>Installer sur un autre appareil</h2>
@@ -234,20 +124,6 @@
         <input id="set-sb-cle" type="password" autocomplete="off" spellcheck="false"></div>
       <button type="button" id="btn-save-sync">Enregistrer</button>
     </div></details>
-  </section>
-  <section class="panneau">
-    <h2>Recherche par plaque</h2>
-    <p class="muted">Clé api-plaque.com (RapidAPI). Elle reste sur cet appareil et n'est envoyée qu'au service de recherche.</p>
-    <div class="stack">
-      <div class="field"><label for="set-cle">Clé (X-RapidAPI-Key)</label>
-        <input id="set-cle" type="password" autocomplete="off" spellcheck="false"></div>
-      <div class="field"><label for="set-host">Adresse du service (X-RapidAPI-Host)</label>
-        <input id="set-host" autocomplete="off" spellcheck="false"></div>
-      <div class="field"><label for="set-token">Token Autoways (Authorization: Bearer)</label>
-        <input id="set-token" type="password" autocomplete="off" spellcheck="false"></div>
-      <span class="hint" id="set-usage"></span>
-      <button type="button" id="btn-save-plaque">Enregistrer la clé</button>
-    </div>
   </section>
   <section class="panneau">
     <h2>Importer mon stock</h2>
@@ -273,6 +149,7 @@
   <button data-tab="leads">Leads</button>
   <button data-tab="stock">Stock</button>
   <button data-tab="reprises">Reprise</button>
+  <button data-tab="depot">Dépôt vente</button>
 </nav>
 
 <dialog id="dlg">
@@ -329,12 +206,42 @@
       <button type="button" id="r-btn-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
     <div id="reprise-body" class="o-body"></div>
     <div class="actions o-actions">
-      <button type="button" id="r-btn-supprimer" class="danger">Supprimer</button>
-      <button type="button" id="r-btn-refuser" class="danger">Refuser</button>
+      <button type="button" id="r-btn-retour">Retour</button>
+      <button type="button" id="r-btn-annuler" class="danger" hidden>Annuler la reprise</button>
       <span class="spacer"></span>
-      <button type="button" id="r-btn-enregistrer">Enregistrer</button>
-      <button type="button" id="r-btn-suivant" class="primary">Créer et coter →</button>
-      <button type="button" id="r-btn-valider" class="success">Valider la reprise → préparation</button>
+      <button type="button" id="r-btn-enregistrer">Enregistrer pour plus tard</button>
+      <button type="button" id="r-btn-suivant" class="primary">Coter →</button>
+      <button type="button" id="r-btn-valider" class="success">Valider</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-depot" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="depot-titre">Nouveau dépôt vente</h2>
+      <button type="button" id="d-btn-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <ol class="etapes" id="depot-etapes"></ol>
+    <div id="depot-body" class="o-body"></div>
+    <div class="actions o-actions">
+      <button type="button" id="d-btn-retour">Retour</button>
+      <span class="spacer"></span>
+      <button type="button" id="d-btn-plus-tard">Enregistrer pour plus tard</button>
+      <button type="button" id="d-btn-valider" class="success" hidden>Valider le dépôt</button>
+      <button type="button" id="d-btn-suivant" class="primary">Suivant →</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-scan" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="scan-titre">Photographier les documents</h2>
+      <button type="button" id="scan-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <div id="scan-body" class="o-body"></div>
+    <div class="actions o-actions">
+      <button type="button" id="scan-passer">Passer ce document</button>
+      <span class="spacer"></span>
+      <label class="button primary ph-btn" id="scan-prendre">📷 Prendre la photo<input id="scan-input" type="file" accept="image/*" capture="environment" hidden></label>
+      <button type="button" id="scan-suivant" class="success" hidden>Document suivant →</button>
     </div>
   </div>
 </dialog>
@@ -422,6 +329,8 @@
 <script src="plaque.js"></script>
 <script src="qrcode.js"></script>
 <script src="sync.js"></script>
+<script src="droits.js"></script>
+<script src="fichiers.js"></script>
 <script src="photos.js"></script>
 <script src="offre.js"></script>
 <script src="reprise.js"></script>
@@ -430,6 +339,9 @@
 <script src="facture.js"></script>
 <script src="prepa.js"></script>
 <script src="depot.js"></script>
+<script src="scan.js"></script>
+<script src="depotvente.js"></script>
+<script src="partenaires.js"></script>
 <script src="enligne.js"></script>
 <script src="commission.js"></script>
 <script src="reseau.js"></script>

@@ -82,20 +82,31 @@ function toast(msg) {
 const clientNom = c => c ? [c.prenom, c.nom].filter(Boolean).join(' ') || c.societe || '(sans nom)' : '(client supprimé)';
 const vehiculeNom = v => v ? [v.marque, v.modele, v.finition].filter(Boolean).join(' ') || '(véhicule sans nom)' : '(véhicule supprimé)';
 
-// Parcours : Reprise à étudier → (validée) En préparation / En stock → Réservé → Vendu, ou Reprise refusée.
+// Parcours d'une reprise : en cours (« Reprise à étudier ») → validée → (offre passée en commande) En préparation / En stock
+// → Réservé → Vendu, ou annulée (« Reprise refusée »). Un dépôt-vente pas encore validé est « Dépôt en cours ».
 const STATUT_VEHICULE = {
-  'Reprise à étudier': 'b-purple', 'Reprise refusée': 'b-red', 'En préparation': 'b-blue',
+  'Reprise à étudier': 'b-purple', 'Reprise validée': 'b-green', 'Reprise refusée': 'b-red', 'Dépôt en cours': 'b-purple', 'En préparation': 'b-blue',
   'En stock': 'b-green', 'Réservé': 'b-orange', 'Vendu': 'b-grey',
 };
-const REPRISE = ['Reprise à étudier', 'Reprise refusée'];
+// Libellés affichés (les anciens noms restent dans les données).
+const LIBELLE_STATUT = { 'Reprise à étudier': 'Reprise en cours', 'Reprise refusée': 'Reprise annulée' };
+const libStatut = s => LIBELLE_STATUT[s] || s || '';
+const REPRISE = ['Reprise à étudier', 'Reprise validée', 'Reprise refusée'];
 const DISPONIBLE = ['En préparation', 'En stock'];
 // Origine des clients : sert au tableau de bord (quelles sources font vendre).
 const SOURCES = ['', 'Leboncoin', 'La Centrale', 'Facebook', 'Instagram', 'Site / vitrine', 'Apporteur réseau', 'Passage au garage', 'Bouche-à-oreille', 'Ancien client', 'Téléphone', 'Autre'];
 const TYPES = ['', 'Citadine', 'Berline', 'Break', 'SUV / 4x4', 'Monospace', 'Coupé / Cabriolet', 'Utilitaire', 'Pick-up'];
 // Véhicules : deux vues. « Stock » (pas d'ajout direct, on y entre par une reprise validée) et « Reprises ».
 let vueVehicule = 'stock';
-// Stock : deux sous-onglets, « En stock » et « Préparation » (reprises validées en cours de remise en état).
+// Stock : sous-onglets En prépa, Stock, Réservés, Vendus (véhicules achetés) et Partenaires (véhicules des autres garages du réseau).
 let vueStock = 'stock';
+// Dépôt vente : En stock, Réservés, Vendus, et « À compléter » (dépôts enregistrés pour plus tard).
+let vueDepot = 'stock';
+const VUES_DEPOT = {
+  stock: ['Véhicules en stock', ['En stock', 'En préparation']],
+  reserves: ['Réservés', ['Réservé']],
+  vendus: ['Vendus', ['Vendu']],
+};
 const filtresStock = { couleur: '', type: '', anneeMin: '', anneeMax: '', kmMax: '' };
 // Sous-onglets du Stock : libellé et statut du véhicule.
 const VUES_STOCK = {
@@ -105,18 +116,19 @@ const VUES_STOCK = {
   vendus: ['Vendus', 'Vendu'],
 };
 const STATUTS_REPRISE = {
-  'À étudier': v => v.statut === 'Reprise à étudier',
-  'Refusées': v => v.statut === 'Reprise refusée',
+  'Reprises en cours': v => v.statut === 'Reprise à étudier',
+  'Reprises validées': v => v.statut === 'Reprise validée',
+  'Reprises annulées': v => v.statut === 'Reprise refusée',
 };
-let filtreReprise = 'À étudier';
+let filtreReprise = 'Reprises en cours';
 const interessesPar = v => db.all('clients').filter(c => (c.interets || []).includes(v.id));
 const num = x => Number(x) || 0;
 // Recherche d'un client (marque, budget, km…) : alerte quand une reprise ou un véhicule du stock correspond.
 const RECHERCHE = ['rechMarque', 'rechModele', 'rechBudget', 'rechKmMax', 'rechAnneeMin', 'rechCarburant', 'rechBoite'];
 const aUneRecherche = c => RECHERCHE.some(k => c[k]);
 function correspond(c, v) {
-  if (!aUneRecherche(c) || !(DISPONIBLE.includes(v.statut) || v.statut === 'Reprise à étudier')) return false;
-  const reprise = v.statut === 'Reprise à étudier';
+  const reprise = ['Reprise à étudier', 'Reprise validée'].includes(v.statut);
+  if (!aUneRecherche(c) || !(DISPONIBLE.includes(v.statut) || reprise)) return false;
   return (!c.rechMarque || norm(v.marque).includes(norm(c.rechMarque)))
     && (!c.rechModele || norm([v.modele, v.finition].join(' ')).includes(norm(c.rechModele)))
     && (!c.rechBudget || reprise || !v.prixVente || num(v.prixVente) <= num(c.rechBudget))
@@ -278,9 +290,10 @@ const TABS = {
     search: v => [v.immatriculation, v.vin, v.marque, v.modele, v.finition, v.vendeurId ? clientNom(db.get('clients', v.vendeurId)) : ''],
     sort: (a, b) => (b.creeLe || '').localeCompare(a.creeLe || ''),
     filter: v => {
-      if (vueVehicule === 'reprises') return STATUTS_REPRISE[filtreReprise](v);
+      if (vueVehicule === 'reprises') return !Depot.est(v) && STATUTS_REPRISE[filtreReprise](v);
+      if (vueVehicule === 'depot') return Depot.est(v) && (vueDepot === 'brouillons' ? v.statut === 'Dépôt en cours' : VUES_DEPOT[vueDepot][1].includes(v.statut));
       const f = filtresStock;
-      return v.statut === VUES_STOCK[vueStock][1]
+      return !Depot.est(v) && v.statut === VUES_STOCK[vueStock]?.[1]
         && (!f.couleur || norm(v.couleur) === norm(f.couleur))
         && (!f.type || v.type === f.type)
         && (!f.anneeMin || num(v.annee) >= num(f.anneeMin))
@@ -294,13 +307,14 @@ const TABS = {
         : !reprise && v.prixVente && v.prixAchat ? num(v.prixVente) - num(v.prixAchat) - Prepa.frais(v) : null;
       return `${v.image ? `<div class="thumb"><img src="${esc(v.image)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></div>` : ''}
         <div class="top"><span class="title">${esc(vehiculeNom(v))}</span>
-        <span class="c-badges">${Depot.est(v) ? '<span class="badge b-purple">Dépôt-vente</span>' : ''}${Reseau.actif() && Reseau.partage(v) && ['En stock', 'Réservé'].includes(v.statut) ? '<span class="badge b-blue" title="Partagé au réseau Ocaz">Réseau</span>' : ''}<span class="badge ${STATUT_VEHICULE[v.statut] || 'b-grey'}">${esc(v.statut || '')}</span></span></div>
+        <span class="c-badges">${Depot.est(v) ? '<span class="badge b-purple">Dépôt-vente</span>' : ''}${Reseau.actif() && Reseau.partage(v) && ['En stock', 'Réservé'].includes(v.statut) ? '<span class="badge b-blue" title="Partagé au réseau Ocaz">Réseau</span>' : ''}<span class="badge ${STATUT_VEHICULE[v.statut] || 'b-grey'}">${esc(libStatut(v.statut))}</span></span></div>
         <div class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite, v.type, v.couleur].filter(Boolean).join(' · '))}</div>
         ${(v.photos || []).length ? `<div class="sub">📷 ${v.photos.length} photo(s)</div>` : Photos.deblocable(v) ? '<div class="sub">📷 Photos à prendre</div>' : ''}
         ${v.statut === 'En préparation' ? `<div class="sub">🔧 Préparation ${v.prepa ? Prepa.avancement(v) + ' · frais ' + (euros(Prepa.fraisReels(v)) || '0 €') : 'à commencer'}</div>` : ''}
         ${!reprise && interessesPar(v).length ? `<div class="sub">★ ${interessesPar(v).length} client(s) intéressé(s)</div>` : ''}
         ${clientsQuiCherchent(v).length ? `<div class="sub">🔎 ${clientsQuiCherchent(v).length} client(s) cherchent ce véhicule</div>` : ''}
-        ${reprise && v.vendeurId ? `<div class="sub">Vendeur : ${esc(clientNom(db.get('clients', v.vendeurId)))}</div>` : ''}
+        ${(reprise || Depot.est(v)) && v.vendeurId ? `<div class="sub">${Depot.est(v) ? 'Propriétaire' : 'Vendeur'} : ${esc(clientNom(db.get('clients', v.vendeurId)))}</div>` : ''}
+        ${Depot.est(v) && DepotVente.docsManquants(v).length ? `<div class="sub alerte">📄 Documents à prendre : ${esc(DepotVente.docsManquants(v).join(', '))}</div>` : ''}
         <div class="top"><span>${v.immatriculation ? `<span class="plate">${esc(v.immatriculation)}</span>` : ''}</span>
         <span class="price">${prix}${marge !== null ? `<span class="sub"> · ${Depot.est(v) ? 'commission' : 'marge'} ${euros(marge)}</span>` : ''}</span></div>`;
     },
@@ -415,7 +429,8 @@ const ONGLETS = {
   commandes: { table: 'commandes', icon: 'commandes', label: 'Commandes', placeholder: 'N°, client, véhicule…' },
   leads: { table: null, icon: 'leads', label: 'Leads', placeholder: '' },
   stock: { table: 'vehicules', icon: 'stock', label: 'Stock', placeholder: 'Rechercher un modèle, une marque, une plaque…' },
-  reprises: { table: 'vehicules', icon: 'reprise', label: 'Reprise', placeholder: 'Modèle, plaque, vendeur…' },
+  reprises: { table: 'vehicules', icon: 'reprise', label: 'Reprise', placeholder: 'Modèle, plaque…' },
+  depot: { table: 'vehicules', icon: 'depot', label: 'Dépôt vente', placeholder: 'Modèle, plaque, propriétaire…' },
   planning: { table: 'planning', icon: 'planning', label: 'Planning', placeholder: 'Client, véhicule, type…' },
   donnees: { table: null, icon: 'donnees', label: 'Données', placeholder: '' },
   parametres: { table: null, icon: 'reglages', label: 'Paramètres', placeholder: '' },
@@ -430,6 +445,7 @@ function render() {
   if (onglet === 'donnees') { renderFiltres(); Donnees.rendre(); return; }
   if (onglet === 'parametres') { renderFiltres(); return; }
   if (onglet === 'leads') { renderFiltres(); Reseau.rendreLeads(); return; }
+  if (onglet === 'stock' && (vueStock === 'partenaires' || !Droits.achat())) { vueStock = 'partenaires'; renderFiltres(); Partenaires.rendre(); return; }
   const tab = TABS[current];
   const q = norm($('#search').value.trim());
   renderFiltres();
@@ -440,7 +456,7 @@ function render() {
   if (onglet === 'planning' && filtreRdv === 'Semaine') { renderSemaine(rows); return; }
   const total = db.all(current).length;
   const n = rows.length;
-  const titre = { stock: 'véhicule', reprises: 'reprise', planning: 'rendez-vous', commandes: { Offres: 'offre', Commandes: 'commande', Livraisons: 'livraison', 'Annulées': 'annulée' }[vueCommande] }[onglet] || tab.titre;
+  const titre = { stock: 'véhicule', reprises: 'reprise', depot: 'véhicule', planning: 'rendez-vous', commandes: { Offres: 'offre', Commandes: 'commande', Livraisons: 'livraison', 'Annulées': 'annulée' }[vueCommande] }[onglet] || tab.titre;
   $('#count').textContent = (tab.filter || n !== total) ? `${n} ${titre}${n > 1 && titre !== 'rendez-vous' ? 's' : ''}` : `${total} ${titre}${total > 1 ? 's' : ''}`;
   const q2 = $('#search').value.trim();
   const vide = {
@@ -448,15 +464,16 @@ function render() {
     commandes: ['Aucune offre ni commande', 'Crée une offre : une relance est planifiée à J+2. Acceptée, elle passe en commande, puis en livraison.'],
     stock: ['Aucun véhicule ici', 'Les véhicules entrent en stock quand tu valides une reprise.'],
     reprises: ['Aucune reprise ici', 'Tape la plaque dans « + Nouvelle reprise » : la fiche se remplit toute seule.'],
+    depot: ['Aucun dépôt vente ici', 'Crée un dépôt avec « + Nouveau dépôt vente » : client, véhicule, prix, puis documents.'],
     planning: ['Rien de prévu', 'Ajoute un essai, une expertise, une livraison ou une relance.'],
   }[onglet];
   const [t1, t2] = total && (q2 || tab.filter) ? ['Aucun résultat', 'Essaie une autre recherche ou d\'autres filtres.'] : vide;
   $('#list').innerHTML = n
     ? rows.map(r => `<div class="card" data-id="${r.id}">${tab.card(r)}</div>`).join('')
-    : `<div class="empty">${ILLUS[ONGLETS[onglet].icon]}<strong>${t1}</strong><span>${t2}</span></div>`;
+    : `<div class="empty">${ILLUS[ONGLETS[onglet].icon] || ILLUS.stock}<strong>${t1}</strong><span>${t2}</span></div>`;
 }
 
-const sigFiltres = () => onglet + vueStock + JSON.stringify(filtresStock) + filtreReprise + filtreRdv + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
+const sigFiltres = () => onglet + vueStock + vueDepot + Droits.achat() + JSON.stringify(filtresStock) + filtreReprise + filtreRdv + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
   + db.all('vehicules').map(v => v.statut + v.couleur).join() + db.all('planning').map(r => r.date + r.fait).join();
 
 // Calendrier de la semaine : un clic sur un jour ajoute un évènement à cette date.
@@ -496,10 +513,10 @@ function renderFiltres() {
   const box = $('#filters');
   const add = $('#btn-add');
   add.style.display = onglet === 'stock' ? 'none' : '';
-  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'planning' ? 'Nouveau RDV' : onglet === 'commandes' ? 'Nouvelle offre' : 'Ajouter') + '</span>';
+  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'depot' ? 'Nouveau dépôt vente' : onglet === 'planning' ? 'Nouveau RDV' : onglet === 'commandes' ? 'Nouvelle offre' : 'Ajouter') + '</span>';
   add.style.display = onglet === 'stock' || (onglet === 'commandes' && vueCommande !== 'Offres') ? 'none' : '';
   if (!ONGLETS[onglet].table) add.style.display = 'none';
-  if (!['stock', 'reprises', 'planning', 'commandes'].includes(onglet)) { box.innerHTML = ''; box.dataset.vue = ''; return; }
+  if (!['stock', 'reprises', 'depot', 'planning', 'commandes'].includes(onglet)) { box.innerHTML = ''; box.dataset.vue = ''; return; }
   const all = db.all('vehicules');
   const opt = (list, val) => list.map(o => `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o || 'Tous')}</option>`).join('');
   const sig = sigFiltres();
@@ -517,13 +534,25 @@ function renderFiltres() {
     html = `<div class="chips">${Object.keys(FILTRES_RDV).map(f =>
       `<button type="button" data-rdv="${f}" class="chip${f === filtreRdv ? ' active' : ''}">${f}${f === 'Semaine' ? '' : ` (${db.all('planning').filter(FILTRES_RDV[f]).length})`}</button>`).join('')}</div>`;
   } else if (vueVehicule === 'reprises') {
-    html += `<div class="chips">${Object.keys(STATUTS_REPRISE).map(f =>
-      `<button type="button" data-reprise="${f}" class="chip${f === filtreReprise ? ' active' : ''}">${f} (${all.filter(STATUTS_REPRISE[f]).length})</button>`).join('')}</div>`;
+    const reps = all.filter(v => !Depot.est(v));
+    html += `<div class="segmented">${Object.keys(STATUTS_REPRISE).map(f =>
+      `<button type="button" data-reprise="${f}" class="${f === filtreReprise ? 'active' : ''}">${f.replace('Reprises ', '')} (${reps.filter(STATUTS_REPRISE[f]).length})</button>`).join('')}</div>`;
+  } else if (vueVehicule === 'depot') {
+    const deps = all.filter(Depot.est);
+    const brouillons = deps.filter(v => v.statut === 'Dépôt en cours').length;
+    html += `<div class="segmented seg-stock">${Object.entries(VUES_DEPOT).map(([k, [l, st]]) =>
+      `<button type="button" data-vuedepot="${k}" class="${k === vueDepot ? 'active' : ''}">${l}<small>${deps.filter(v => st.includes(v.statut)).length}</small></button>`).join('')}</div>
+      ${brouillons ? `<div class="chips"><button type="button" data-vuedepot="brouillons" class="chip${vueDepot === 'brouillons' ? ' active' : ''}">À compléter (${brouillons})</button></div>` : ''}`;
   } else {
-    html += `<div class="segmented seg-stock">${Object.entries(VUES_STOCK).map(([k, [l, st]]) =>
-      `<button type="button" data-vuestock="${k}" class="${k === vueStock ? 'active' : ''}">${l}<small>${all.filter(v => v.statut === st).length}</small></button>`).join('')}</div>`;
+    // Dépôt-vente seul : le Stock ne montre que les véhicules partenaires.
+    const achat = all.filter(v => !Depot.est(v));
+    const vues = Droits.achat() ? Object.entries(VUES_STOCK) : [];
+    html += `<div class="segmented seg-stock">${vues.map(([k, [l, st]]) =>
+      `<button type="button" data-vuestock="${k}" class="${k === vueStock ? 'active' : ''}">${l}<small>${achat.filter(v => v.statut === st).length}</small></button>`).join('')}
+      <button type="button" data-vuestock="partenaires" class="${vueStock === 'partenaires' ? 'active' : ''}">Partenaires<small>${Partenaires.nombre()}</small></button></div>`;
+    if (vueStock === 'partenaires') { box.innerHTML = html + Partenaires.filtresHtml(); return; }
     const f = filtresStock;
-    const couleurs = [''].concat([...new Set(all.filter(v => !REPRISE.includes(v.statut) && v.couleur).map(v => v.couleur.trim()))].sort());
+    const couleurs = [''].concat([...new Set(achat.filter(v => !REPRISE.includes(v.statut) && v.couleur).map(v => v.couleur.trim()))].sort());
     html += `<div class="filtres">
       <label>Type<select data-f="type">${opt(TYPES, f.type)}</select></label>
       <label>Couleur<select data-f="couleur">${opt(couleurs, f.couleur)}</select></label>
@@ -545,6 +574,7 @@ function switchTab(name) {
   majLoupe();
   current = ONGLETS[name].table;
   if (current === 'vehicules') vueVehicule = name;
+  if (name === 'stock' && !Droits.achat()) vueStock = 'partenaires';
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   $('#search').value = '';
   $('#search').placeholder = ONGLETS[name].placeholder;
@@ -620,7 +650,7 @@ function fieldHtml(f, row) {
     case 'textarea': return `<div class="${cls}">${label}<textarea id="${id}" name="${f.k}">${esc(val)}</textarea></div>`;
     // Une nouvelle vente commence toujours par une offre : pas de choix du statut à la création.
     case 'select': if (f.k === 'statut' && current === 'commandes' && !row.id) return `<input type="hidden" id="${id}" name="statut" value="Offre">`;
-      return `<div class="${cls}">${label}<select id="${id}" name="${f.k}">${f.options.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
+      return `<div class="${cls}">${label}<select id="${id}" name="${f.k}">${f.options.map(o => `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(f.k === 'statut' ? libStatut(o) : o)}</option>`).join('')}</select></div>`;
     case 'ref': {
       let opts = db.all(f.table).slice();
       if (f.table === 'vehicules') {
@@ -682,6 +712,9 @@ function openForm(id, preset = {}) {
     : current === 'commandes' && id && ETAPE_SUIVANTE[row.statut]
     ? `<button type="button" id="btn-etape" class="success" data-statut="${ETAPE_SUIVANTE[row.statut][1]}">${ETAPE_SUIVANTE[row.statut][0]}</button>`
     : '';
+  // Dépôt-vente : documents du déposant (CNI, carte grise, justificatif, RIB) à téléverser ou photographier.
+  if (current === 'vehicules' && id && Depot.est(row))
+    $('#form-extra').insertAdjacentHTML('afterbegin', `<button type="button" id="btn-docs-depot">📄 Documents${DepotVente.docsManquants(row).length ? ' (' + DepotVente.docsManquants(row).length + ' à prendre)' : ''}</button>`);
   // Sur le téléphone, la prise de photos se débloque dès que le véhicule est en préparation.
   if (current === 'vehicules' && id && Photos.deblocable(row) && Photos.estTelephone())
     $('#form-extra').insertAdjacentHTML('afterbegin', '<button type="button" id="btn-photos" class="primary">📷 Prendre les photos</button>');
@@ -695,6 +728,7 @@ function wireVehicule() {
   const galerie = $('#galerie-photos');
   if (galerie) Photos.galerie(galerie, db.get('vehicules', editing.id));
   $('#btn-photos')?.addEventListener('click', () => Photos.ouvrir(editing.id));
+  $('#btn-docs-depot')?.addEventListener('click', () => { $('#dlg').close(); DepotVente.ouvrir(editing.id, 4); });
   $('#btn-prepa')?.addEventListener('click', () => Prepa.ouvrir(editing.id));
   $('#btn-pret')?.addEventListener('click', () => {
     $('#f-statut').value = 'En stock';
@@ -754,7 +788,8 @@ function wireVehicule() {
       $('#fiche-n').textContent = Object.keys(r.ficheTechnique).length;
       $('#fiche').hidden = false;
       $('#vin-hint').textContent = r.description ? 'Trouvé : ' + r.description : 'Véhicule trouvé.';
-      toast(`${n} champs remplis automatiquement (${Plaque.usageCeMois()} recherche(s) ce mois-ci)`);
+      const usage = Plaque.usageTexte();
+      toast(`${n} champs remplis automatiquement` + (usage ? ` (${usage})` : ''));
     } catch (err) {
       toast(err.message);
     } finally {
@@ -785,7 +820,7 @@ function wireClient() {
   $('#btn-nouvelle-reprise').addEventListener('click', () => {
     if (!$('#form').reportValidity()) return;
     apresEnregistrement = saved => {
-      filtreReprise = 'À étudier';
+      filtreReprise = 'Reprises en cours';
       switchTab('reprises');
       Reprise.ouvrir(null, { vendeurId: saved.id });
     };
@@ -795,8 +830,8 @@ function wireClient() {
 
 let apresEnregistrement = null;
 
-// Reprise portée par une offre : le passage en commande la valide (le véhicule entre en préparation),
-// l'annulation ou la suppression de la commande la renvoie dans les reprises à étudier.
+// Reprise validée portée par une offre : le passage en commande fait entrer le véhicule en préparation,
+// l'annulation ou la suppression de la commande le renvoie dans les reprises validées.
 function repriseSuitCommande(o) {
   const r = db.get('vehicules', o.repriseId);
   if (!r) return;
@@ -809,8 +844,8 @@ function repriseSuitCommande(o) {
   } else if (o.statut === 'Annulée' && r.repriseCommandeId === o.id && ['En préparation', 'En stock'].includes(r.statut)) {
     // Retirée du livre de police seulement si c'est la dernière ligne (pas de trou dans la numérotation).
     const dernier = num(r.policeNumero) && num(r.policeNumero) === Math.max(...db.all('vehicules').map(x => num(x.policeNumero)));
-    db.upsert('vehicules', { id: r.id, statut: 'Reprise à étudier', dateEntree: '', repriseCommandeId: '', ...(dernier ? { policeNumero: '' } : {}) });
-    toast(`Commande annulée : la reprise ${vehiculeNom(r)} repasse en reprise à étudier`);
+    db.upsert('vehicules', { id: r.id, statut: 'Reprise validée', dateEntree: '', repriseCommandeId: '', ...(dernier ? { policeNumero: '' } : {}) });
+    toast(`Commande annulée : la reprise ${vehiculeNom(r)} repasse dans les reprises validées`);
   }
 }
 
@@ -927,22 +962,12 @@ $('#dlg').addEventListener('close', () => { apresEnregistrement = null; ficheEnC
 // Onglet Paramètres : réglages du garage (partagés) et de cet appareil.
 function remplirParametres() {
   Param.rendre();
-  const s = Plaque.settings();
-  $('#set-cle').value = s.cle;
-  $('#set-host').value = s.host;
-  $('#set-token').value = s.token;
   const sb = Sync.settings();
   $('#set-sb-url').value = sb.url || '';
   $('#set-sb-cle').value = sb.cle || '';
   afficherSync(Sync.status, Sync.user, Sync.role);
-  afficherEquipe();
-  afficherGarages();
   afficherQr();
-  EnLigne.rendreParametres();
-  Reseau.rendreParametres();
-  Reseau.afficherApporteurs();
   majInstall();
-  $('#set-usage').textContent = `${Plaque.usageCeMois()} recherche(s) par plaque ce mois-ci sur cet appareil (10 gratuites par mois avec l'offre Basic).`;
 }
 $('#btn-menu').addEventListener('click', () => switchTab('parametres'));
 
@@ -957,12 +982,11 @@ function afficherSync(status, user, role) {
   pill.hidden = !Sync.configure() || !role;
   pill.className = 'sync-pill s-' + status + (demo ? ' demo' : '');
   pill.innerHTML = icon('nuage', 16) + '<span>' + (demo ? 'Démo · ' : '') + SYNC_TEXTE[status] + '</span>';
-  $('#sync-etat').textContent = user ? `Connecté : ${user.email}${role ? ' · ' + (Sync.profil.superadmin ? 'Super-admin' : role === 'admin' ? 'Admin' : 'Vendeur') : ''} · ${SYNC_TEXTE[status]}` : '';
+  $('#sync-etat').textContent = user ? `Connecté : ${demo ? 'compte de démo' : user.email}${Sync.profil.superadmin ? ' · Administrateur' : ''} · ${SYNC_TEXTE[status]}` : '';
   $('#compte-connecte').hidden = !user;
   $('#changer-mdp').hidden = demo;
   $('#btn-demo-reset').hidden = !demo;
-  $('#equipe').hidden = role !== 'admin' || demo;
-  $('#superadmin').hidden = !Sync.profil.superadmin;
+  $('#btn-admin').hidden = !Sync.profil.superadmin;
   $('#reglages-supabase').open = !Sync.configure();
   if (role) etaitConnecte = true;
   if (status === 'ok') {
@@ -976,7 +1000,6 @@ function afficherSync(status, user, role) {
     // Démo : le garage fait partie du réseau, pour montrer les leads de l'apporteur de démo.
     if (demo && !Param.get().reseau.accepteLe) Param.save({ reseau: { ...Param.get().reseau, actif: true, accepteLe: new Date().toISOString() } });
     if (onglet === 'donnees') render();
-    if (onglet === 'parametres') { afficherEquipe(); afficherGarages(); Reseau.afficherApporteurs(); }
   }
   // Déconnexion : les données quittent l'appareil (elles restent en ligne).
   if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); db.vider(); switchTab('donnees'); }
@@ -1000,6 +1023,7 @@ function chargement(oui) {
 const espaceLien = new URLSearchParams(location.search).get('espace');
 if (['revendeur', 'apporteur'].includes(espaceLien)) Sync.preferer(espaceLien === 'apporteur' ? 'apporteur' : 'garage');
 $('#btn-espace').addEventListener('click', () => Sync.preferer('apporteur'));
+$('#btn-admin').addEventListener('click', () => Sync.preferer(''));
 
 // Écran de connexion : l'appli s'ouvre dessus tant qu'on n'est pas connecté.
 function afficherAuth(status, user, role) {
@@ -1086,64 +1110,6 @@ $('#btn-demo-reset').addEventListener('click', () => {
   toast('Démo remise à zéro');
 });
 
-// Équipe : l'admin ajoute (compte créé avec 12345678), réinitialise ou retire un collègue.
-async function afficherEquipe() {
-  if (Sync.role !== 'admin') return;
-  const box = $('#equipe-liste');
-  try {
-    const liste = await Sync.membres();
-    box.innerHTML = liste.map(m => `<div class="membre"><span>${esc(m.email)}${m.doit_changer_mdp ? '<small>mot de passe de départ</small>' : ''}</span>
-      <span class="badge ${m.role === 'admin' ? 'b-blue' : 'b-grey'}">${m.role === 'admin' ? 'Admin' : 'Vendeur'}</span>
-      ${m.email === Sync.user.email.toLowerCase() ? '<span class="hint">toi</span>' : `<button type="button" class="chip" data-reinit="${esc(m.email)}">Réinit. mdp</button><button type="button" class="chip" data-retirer="${esc(m.email)}">Retirer</button>`}</div>`).join('');
-  } catch (err) { box.textContent = err.message; }
-}
-$('#btn-equipe-ajouter').addEventListener('click', async () => {
-  const email = $('#equipe-email').value.trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Email invalide.'); return; }
-  try {
-    await Sync.ajouterMembre(email, $('#equipe-role').value);
-    $('#equipe-email').value = '';
-    toast(`Compte créé : ${email} / 12345678`);
-    afficherEquipe();
-  } catch (err) { toast(err.message); }
-});
-async function reinitialiser(email, apres) {
-  if (!confirm(`Remettre le mot de passe de ${email} à 12345678 ?`)) return;
-  try { await Sync.reinitMdp(email); toast(`Mot de passe de ${email} : 12345678`); apres(); } catch (err) { toast(err.message); }
-}
-$('#equipe-liste').addEventListener('click', async e => {
-  if (e.target.dataset.reinit) { reinitialiser(e.target.dataset.reinit, afficherEquipe); return; }
-  const email = e.target.dataset.retirer;
-  if (!email || !confirm(`Retirer l'accès de ${email} ?`)) return;
-  try { await Sync.retirerMembre(email); afficherEquipe(); } catch (err) { toast(err.message); }
-});
-
-// Super-admin : création des comptes des garages clients.
-async function afficherGarages() {
-  if (!Sync.profil.superadmin) return;
-  const box = $('#sa-liste');
-  try {
-    const liste = await Sync.garages();
-    box.innerHTML = liste.map(g => `<div class="sa-garage"><div class="sa-tete"><strong>${esc(g.nom)}</strong>
-        ${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}<span class="hint">depuis le ${dateFr(g.cree_le)}</span></div>
-      ${(g.comptes || []).map(c => `<div class="membre"><span>${esc(c.email)}${c.doit_changer_mdp ? '<small>mot de passe de départ</small>' : ''}</span>
-        <span class="badge ${c.role === 'admin' ? 'b-blue' : 'b-grey'}">${c.role === 'admin' ? 'Admin' : 'Vendeur'}</span>
-        ${c.email === Sync.user.email.toLowerCase() ? '<span class="hint">toi</span>' : g.demo ? '' : `<button type="button" class="chip" data-sa-reinit="${esc(c.email)}">Réinit. mdp</button>`}</div>`).join('')}</div>`).join('');
-  } catch (err) { box.textContent = err.message; }
-}
-$('#btn-sa-creer').addEventListener('click', async () => {
-  const nom = $('#sa-nom').value.trim(), email = $('#sa-email').value.trim();
-  if (!nom) { toast("Saisis le nom de l'entreprise."); return; }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Email invalide.'); return; }
-  try {
-    await Sync.creerGarage(nom, email);
-    $('#sa-nom').value = ''; $('#sa-email').value = '';
-    toast(`Compte créé : ${email} / 12345678`);
-    afficherGarages();
-  } catch (err) { toast(err.message); }
-});
-$('#sa-liste').addEventListener('click', e => { if (e.target.dataset.saReinit) reinitialiser(e.target.dataset.saReinit, afficherGarages); });
-
 // ---------- Installation (sans App Store) ----------
 let invitationInstall = null;
 const estInstallee = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -1184,11 +1150,6 @@ $('#btn-copier-lien').addEventListener('click', async () => {
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 
-$('#btn-save-plaque').addEventListener('click', () => {
-  Plaque.saveSettings({ cle: $('#set-cle').value.trim(), host: $('#set-host').value.trim() || Plaque.DEFAULT_HOST, token: $('#set-token').value.trim() });
-  $('#set-usage').textContent = 'Clé enregistrée sur cet appareil.';
-  toast('Clé enregistrée sur cet appareil');
-});
 
 $('#btn-export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(db.data, null, 2)], { type: 'application/json' });
@@ -1226,6 +1187,7 @@ $('#filters').addEventListener('click', e => {
   if (b.dataset.rdv) filtreRdv = b.dataset.rdv;
   else if (b.dataset.vuecmd) vueCommande = b.dataset.vuecmd;
   else if (b.dataset.vuestock) vueStock = b.dataset.vuestock;
+  else if (b.dataset.vuedepot) vueDepot = b.dataset.vuedepot;
   else if (b.dataset.reprise) filtreReprise = b.dataset.reprise;
   else if (b.id === 'btn-police') { Papiers.ouvrirPolice(); return; }
   else if (b.id === 'btn-export-fac') { Facture.exporter(); return; }
@@ -1241,10 +1203,11 @@ $('#filters').addEventListener('input', e => {
   $('#filters').dataset.vue = sigFiltres();
   render();
 });
-$('#btn-add').addEventListener('click', () => (onglet === 'commandes' ? Offre.ouvrir() : onglet === 'reprises' ? Reprise.ouvrir() : openForm(null)));
+$('#btn-add').addEventListener('click', () => (onglet === 'commandes' ? Offre.ouvrir() : onglet === 'reprises' ? Reprise.ouvrir() : onglet === 'depot' ? DepotVente.ouvrir() : openForm(null)));
 $('#list').addEventListener('click', e => {
   if (e.target.closest('[data-stop]')) return;
   if (Reseau.clic(e)) return;
+  if (Partenaires.clic(e)) return;
   const police = e.target.closest('[data-police]');
   if (police) { Papiers.ouvrirPolice(); return; }
   const sem = e.target.closest('[data-sem]');
@@ -1268,6 +1231,7 @@ $('#list').addEventListener('click', e => {
   const card = e.target.closest('.card');
   if (!card) return;
   if (current === 'commandes') menuCommande(card.dataset.id);
+  else if (current === 'vehicules' && db.get('vehicules', card.dataset.id)?.statut === 'Dépôt en cours') DepotVente.ouvrir(card.dataset.id);
   else if (current === 'vehicules' && REPRISE.includes(db.get('vehicules', card.dataset.id)?.statut)) Reprise.ouvrir(card.dataset.id);
   else openForm(card.dataset.id);
 });
@@ -1300,12 +1264,15 @@ switchTab('donnees');
 document.addEventListener('gesturestart', e => e.preventDefault());
 Offre.init();
 Reprise.init();
+Scan.init();
 Photos.init();
 Param.init();
 Papiers.init();
 Facture.init();
 Prepa.init();
 Depot.init();
+DepotVente.init();
+Partenaires.init();
 EnLigne.init();
 Reseau.init();
 Import.init();
@@ -1318,6 +1285,12 @@ $('#dlg-photos').addEventListener('close', () => {
 // Écran de lancement : court (environ 1 s), puis fondu vers l'appli.
 // Il reste dans la page (caché) pour servir de transition à la connexion.
 setTimeout(() => { if (!chargementDepuis) $('#splash').classList.add('fin'); }, 900);
-Sync.init(afficherSync);
+// Réglages de l'administrateur reçus (ou modifiés) : onglets autorisés et infos du garage.
+Sync.init(afficherSync, () => {
+  Droits.appliquer();
+  if (onglet === 'parametres') Param.rendre();
+  else render();
+});
+Droits.appliquer();
 afficherSync(Sync.status, Sync.user, Sync.role);
 majInstall();

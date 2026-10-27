@@ -1,5 +1,6 @@
-// Onglet Paramètres : infos du garage, documents (RIB…), packs livraison, barème carte grise et calcul des reprises.
-// Ces réglages font partie des données du garage : ils sont partagés par toute l'équipe via la synchro.
+// Onglet Paramètres du revendeur : son garage (logo modifiable, le reste posé par l'administrateur) et ses documents.
+// Les autres réglages (packs, réseau, barèmes) gardent leurs valeurs par défaut ou celles fixées par l'administrateur
+// (Sync.config) ; ils font partie des données du garage, partagées par toute l'équipe via la synchro.
 const Param = (() => {
   const DEFAUTS = {
     garage: { nom: '', adresse: '', codePostal: '', ville: '', telephone: '', email: '', siret: '', tva: '', site: '', logo: '' },
@@ -39,19 +40,34 @@ const Param = (() => {
     return p;
   }
 
+  // Réglages de l'administrateur : infos légales du garage, packs livraison, réseau Ocaz et sa commission.
+  function admin(p) {
+    const c = (typeof Sync !== 'undefined' && Sync.config) || {};
+    const infos = Object.fromEntries(Object.entries(c.infos || {}).filter(([k, v]) => k !== 'logo' && v !== '' && v != null));
+    const garage = { ...DEFAUTS.garage, ...(p.garage || {}), ...infos };
+    const reseau = { ...DEFAUTS.reseau, ...(p.reseau || {}) };
+    if (c.droits) {
+      reseau.actif = !!c.droits.reseau;
+      if (reseau.actif && !reseau.accepteLe) reseau.accepteLe = new Date().toISOString();
+    }
+    if (c.reseau) ['commissionType', 'commissionValeur', 'commissionMin'].forEach(k => { if (c.reseau[k] !== undefined && c.reseau[k] !== '') reseau[k] = c.reseau[k]; });
+    return { garage, reseau, packs: Array.isArray(c.packs) ? c.packs : null };
+  }
+
   function get() {
     const p = db.data.parametres || anciens();
+    const a = admin(p);
     return {
       ...DEFAUTS, ...p,
-      garage: { ...DEFAUTS.garage, ...(p.garage || {}) },
+      garage: a.garage,
       carteGrise: { ...DEFAUTS.carteGrise, ...(p.carteGrise || {}) },
       reprise: { ...DEFAUTS.reprise, ...(p.reprise || {}) },
       facture: { ...DEFAUTS.facture, ...(p.facture || {}) },
       activite: { ...DEFAUTS.activite, ...(p.activite || {}) },
       vitrine: { ...DEFAUTS.vitrine, ...(p.vitrine || {}) },
-      reseau: { ...DEFAUTS.reseau, ...(p.reseau || {}) },
+      reseau: a.reseau,
       photos: { ...DEFAUTS.photos, ...(p.photos || {}) },
-      packs: p.packs || DEFAUTS.packs,
+      packs: a.packs || p.packs || DEFAUTS.packs,
       documents: p.documents || [],
     };
   }
@@ -73,36 +89,23 @@ const Param = (() => {
     return c.toDataURL('image/png');
   }
 
+  // Infos du garage : affichées grisées, seul le logo se change ici (le reste : contacter l'administrateur).
   function rendre() {
-    const p = get();
-    const g = p.garage;
-    $('#p-garage').innerHTML = CHAMPS_GARAGE.map(([k, l, cls, type]) => `<div class="field ${cls || ''}"><label for="g-${k}">${l}</label>
-      <input id="g-${k}" data-g="${k}" type="${type || 'text'}" value="${esc(g[k])}"${k === 'nom' ? ' required' : ''}></div>`).join('');
+    const g = get().garage;
+    $('#p-garage').innerHTML = CHAMPS_GARAGE.map(([k, l, cls, type]) => `<div class="field ${cls || ''}"><label for="g-${k}">${l.replace(' *', '')}</label>
+      <input id="g-${k}" type="${type || 'text'}" value="${esc(g[k])}" disabled></div>`).join('');
     $('#p-logo').innerHTML = g.logo ? `<img src="${esc(g.logo)}" alt="Logo du garage">` : '<span class="hint">Pas de logo</span>';
     $('#btn-logo-suppr').hidden = !g.logo;
-    $('#p-packs').innerHTML = p.packs.map(k => `<div class="pack-ligne" data-pack-id="${esc(k.id)}">
-      <input data-pk="nom" value="${esc(k.nom)}" placeholder="Nom du pack" aria-label="Nom du pack">
-      <span class="inline pk-montant"><input data-pk="montant" type="number" inputmode="decimal" value="${esc(k.montant)}" aria-label="Montant"><b>€</b></span>
-      <label class="check pk-coche" title="Coché d'office dans une nouvelle offre"><input type="checkbox" data-pk="coche"${k.coche ? ' checked' : ''}><span>Par défaut</span></label>
-      <button type="button" class="chip" data-pk-suppr aria-label="Supprimer ce pack">✕</button></div>`).join('')
-      || '<span class="hint">Aucun pack : ajoute-en un.</span>';
-    ['prixCV', 'taxeFixe', 'acheminement'].forEach(k => { $('#cg-' + k).value = p.carteGrise[k]; });
-    $('#set-hausse').value = p.reprise.hausseReunion;
-    $('#set-marge-min').value = p.reprise.margeMin;
-    $('#set-marge-max').value = p.reprise.margeMax;
-    $('#fac-regime').innerHTML = Object.entries(Facture.REGIMES).map(([k, l]) => `<option value="${k}"${k === p.facture.regime ? ' selected' : ''}>${l}</option>`).join('');
-    $('#fac-conditions').value = p.facture.conditions;
-    $('#act-mode').value = p.activite.mode;
-    $('#act-type').innerHTML = Object.entries(Depot.TYPES).map(([k, l]) => `<option value="${k}"${k === p.activite.commissionType ? ' selected' : ''}>${l}</option>`).join('');
-    ['commissionValeur', 'commissionMin', 'dureeMandat'].forEach(k => { $('#act-' + k).value = p.activite[k]; });
     $('#doc-type').innerHTML = TYPES_DOC.map(t => `<option>${t}</option>`).join('');
-    rendreDocuments(p.documents);
+    rendreDocuments(get().documents);
   }
 
   function rendreDocuments(docs) {
     $('#p-docs').innerHTML = docs.length ? docs.map(d => `<div class="doc-ligne"><span class="badge b-blue">${esc(d.type)}</span>
       <span class="doc-nom">${esc(d.nom)}<small>${dateFr(d.date)}</small></span>
       <button type="button" class="chip" data-doc-ouvrir="${esc(d.id)}">Ouvrir</button>
+      <button type="button" class="chip" data-doc-telecharger="${esc(d.id)}">Télécharger</button>
+      <button type="button" class="chip" data-doc-envoyer="${esc(d.id)}">Envoyer par mail</button>
       <button type="button" class="chip" data-doc-suppr="${esc(d.id)}" aria-label="Supprimer">✕</button></div>`).join('')
       : '<span class="hint">Aucun document pour l\'instant.</span>';
     $('#doc-ajout').classList.toggle('desactive', !Sync.role);
@@ -110,25 +113,7 @@ const Param = (() => {
       : 'Les documents sont rangés en ligne : connecte-toi (section Compte) pour en ajouter.';
   }
 
-  // Lecture des packs tels qu'ils sont à l'écran.
-  function packsEcran() {
-    return [...document.querySelectorAll('#p-packs .pack-ligne')].map(l => ({
-      id: l.dataset.packId,
-      nom: l.querySelector('[data-pk=nom]').value.trim(),
-      montant: num(l.querySelector('[data-pk=montant]').value),
-      coche: l.querySelector('[data-pk=coche]').checked,
-    }));
-  }
-
   function init() {
-    $('#btn-save-garage').addEventListener('click', () => {
-      const garage = { ...get().garage };
-      document.querySelectorAll('#p-garage [data-g]').forEach(i => { garage[i.dataset.g] = i.value.trim(); });
-      if (!garage.nom) { toast("Le nom de l'entreprise est obligatoire."); $('#g-nom').focus(); return; }
-      save({ garage });
-      Sync.renommer(garage.nom);
-      toast('Infos du garage enregistrées');
-    });
     $('#logo-input').addEventListener('change', async e => {
       const f = e.target.files[0];
       e.target.value = '';
@@ -137,48 +122,6 @@ const Param = (() => {
       catch (err) { toast("Cette image ne peut pas être lue."); }
     });
     $('#btn-logo-suppr').addEventListener('click', () => { save({ garage: { ...get().garage, logo: '' } }); rendre(); });
-
-    $('#btn-pack-ajouter').addEventListener('click', () => {
-      const packs = packsEcran();
-      packs.push({ id: nouvelId(), nom: '', montant: '', coche: false });
-      save({ packs });
-      rendre();
-      const lignes = document.querySelectorAll('#p-packs .pack-ligne');
-      lignes[lignes.length - 1].querySelector('[data-pk=nom]').focus();
-    });
-    $('#p-packs').addEventListener('click', e => {
-      if (!e.target.closest('[data-pk-suppr]')) return;
-      const id = e.target.closest('.pack-ligne').dataset.packId;
-      save({ packs: packsEcran().filter(k => k.id !== id) });
-      rendre();
-    });
-    $('#btn-save-packs').addEventListener('click', () => {
-      const packs = packsEcran();
-      if (packs.some(k => !k.nom)) { toast('Donne un nom à chaque pack.'); return; }
-      save({ packs });
-      toast('Packs enregistrés : ils apparaissent dans les nouvelles offres');
-    });
-
-    $('#btn-save-cg').addEventListener('click', () => {
-      save({ carteGrise: { prixCV: num($('#cg-prixCV').value) || 60, taxeFixe: num($('#cg-taxeFixe').value), acheminement: num($('#cg-acheminement').value) } });
-      toast('Barème carte grise enregistré');
-    });
-    $('#btn-save-reprise').addEventListener('click', () => {
-      const min = num($('#set-marge-min').value), max = num($('#set-marge-max').value);
-      save({ reprise: { hausseReunion: num($('#set-hausse').value), margeMin: Math.min(min, max), margeMax: Math.max(min, max) } });
-      toast('Réglages de reprise enregistrés');
-    });
-
-    $('#btn-save-facture').addEventListener('click', () => {
-      save({ facture: { regime: $('#fac-regime').value, conditions: $('#fac-conditions').value.trim() } });
-      toast('Réglages de facturation enregistrés');
-    });
-    $('#btn-export-factures').addEventListener('click', () => Facture.exporter());
-    $('#btn-save-activite').addEventListener('click', () => {
-      save({ activite: { mode: $('#act-mode').value, commissionType: $('#act-type').value, commissionValeur: num($('#act-commissionValeur').value),
-        commissionMin: num($('#act-commissionMin').value), dureeMandat: num($('#act-dureeMandat').value) || 90 } });
-      toast('Activité enregistrée : elle sert de choix par défaut pour chaque nouveau véhicule');
-    });
 
     // Documents : rangés dans le dossier privé de l'entreprise.
     $('#doc-input').addEventListener('change', async e => {
@@ -199,9 +142,12 @@ const Param = (() => {
     });
     $('#p-docs').addEventListener('click', async e => {
       const ouvrir = e.target.dataset.docOuvrir, suppr = e.target.dataset.docSuppr;
-      const doc = get().documents.find(d => d.id === (ouvrir || suppr));
+      const tele = e.target.dataset.docTelecharger, envoi = e.target.dataset.docEnvoyer;
+      const doc = get().documents.find(d => d.id === (ouvrir || suppr || tele || envoi));
       if (!doc) return;
       if (!Sync.role) { toast("Connecte-toi pour ouvrir les documents."); return; }
+      if (tele) { Fichiers.telecharger(doc.chemin, doc.nom); return; }
+      if (envoi) { Fichiers.envoyer(doc.chemin, doc.nom, `${doc.type} · ${get().garage.nom || ''}`.trim()); return; }
       if (ouvrir) {
         const w = window.open('', '_blank');
         const { data, error } = await Sync.client.storage.from('documents').createSignedUrl(doc.chemin, 300);

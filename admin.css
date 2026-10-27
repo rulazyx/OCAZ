@@ -1,0 +1,18 @@
+/* Interface administrateur (admin.html) : reprend style.css et apporteur.css. */
+.adm-tete { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adm-outils { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.adm-outils .search { min-width: 200px; }
+.adm-outils .search input { padding-left: 40px; }
+.adm-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.adm-liste .card { display: grid; gap: 2px; }
+.adm-droits { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.adm-droits .off { opacity: .45; text-decoration: line-through; }
+.adm-bloc { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+.adm-bloc .check { margin: 0; }
+.adm-sous { padding-left: 28px; }
+.adm-compte { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.adm-compte:last-child { border-bottom: 0; }
+.adm-compte small { display: block; color: var(--muted); }
+.adm-pack { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto auto; gap: 8px; align-items: center; }
+@media (max-width: 560px) { .adm-pack { grid-template-columns: 1fr 90px; } }
+.adm-info { background: color-mix(in srgb, var(--primary) 8%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }

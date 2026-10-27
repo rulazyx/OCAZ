@@ -114,7 +114,9 @@ const EnLigne = (() => {
   }
 
   // ---------- Paramètres ----------
+  // Réglages de la vitrine : retirés des Paramètres du revendeur (2026-10-27), gardés si la page les affiche.
   function rendreParametres() {
+    if (!$('#vit-slug')) return;
     const r = reglages();
     const slug = r.slug || slugDe(Param.get().garage.nom || Sync.entreprise?.nom || '');
     $('#vit-actif').checked = !!r.actif;
@@ -134,6 +136,14 @@ const EnLigne = (() => {
   }
 
   function init() {
+    if ($('#btn-vit-save')) initParametres();
+    $('#list').addEventListener('click', e => {
+      const c = e.target.dataset.demandeClient, i = e.target.dataset.demandeIgnorer;
+      if (c) { const d = demandes.find(x => x.id === c); if (d) { const cl = versClient(d); switchTab('clients'); openForm(cl.id); } }
+      if (i && confirm('Ignorer cette demande ?')) traiter(i);
+    });
+  }
+  function initParametres() {
     $('#btn-vit-save').addEventListener('click', async () => {
       const slug = slugDe($('#vit-slug').value);
       if (slug.length < 3) { toast("L'adresse doit faire au moins 3 caractères."); return; }
@@ -159,11 +169,6 @@ const EnLigne = (() => {
       const p = await Notification.requestPermission();
       toast(p === 'granted' ? 'Alertes activées sur cet appareil' : 'Alertes refusées par le navigateur');
       rendreParametres();
-    });
-    $('#list').addEventListener('click', e => {
-      const c = e.target.dataset.demandeClient, i = e.target.dataset.demandeIgnorer;
-      if (c) { const d = demandes.find(x => x.id === c); if (d) { const cl = versClient(d); switchTab('clients'); openForm(cl.id); } }
-      if (i && confirm('Ignorer cette demande ?')) traiter(i);
     });
   }
 
