@@ -17,7 +17,7 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
 ## Ocaz Pro (pro.ocaz.re)
 
 Ce dépôt est l'appli des pros, à l'adresse `pro.ocaz.re`. Le site public (véhicules du réseau, vitrines des garages, `integrer.js`,
-pages légales, `rejoindre`, `outils`) est dans le dépôt `CRM-ZX`, à l'adresse `ocaz.re`.
+pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`), à l'adresse `ocaz.re`.
 - L'appli n'est pas référencée : `robots.txt` interdit tout, et chaque page a `<meta name="robots" content="noindex">`.
   Aucun lien du site public ne mène ici : Anthony envoie lui-même l'adresse aux pros. La vraie protection reste la connexion.
 - L'appli s'ouvre directement sur la connexion unique, sans choix de profil ; l'espace (garage ou apporteur) dépend du compte.
