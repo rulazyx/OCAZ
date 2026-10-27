@@ -431,6 +431,7 @@ const ONGLETS = {
   stock: { table: 'vehicules', icon: 'stock', label: 'Stock', placeholder: 'Rechercher un modèle, une marque, une plaque…' },
   reprises: { table: 'vehicules', icon: 'reprise', label: 'Reprise', placeholder: 'Modèle, plaque…' },
   depot: { table: 'vehicules', icon: 'depot', label: 'Dépôt vente', placeholder: 'Modèle, plaque, propriétaire…' },
+  administratif: { table: null, icon: 'administratif', label: 'Administratif', court: 'Admin.', placeholder: '' },
   planning: { table: 'planning', icon: 'planning', label: 'Planning', placeholder: 'Client, véhicule, type…' },
   donnees: { table: null, icon: 'donnees', label: 'Données', placeholder: '' },
   parametres: { table: null, icon: 'reglages', label: 'Paramètres', placeholder: '' },
@@ -445,6 +446,7 @@ function render() {
   Reseau.majPastille();
   if (onglet === 'donnees') { renderFiltres(); Donnees.rendre(); return; }
   if (onglet === 'parametres') { renderFiltres(); return; }
+  if (onglet === 'administratif') { renderFiltres(); Administratif.rendre(); return; }
   if (onglet === 'leads') { renderFiltres(); Revision.rendreOnglet(); return; }
   if (onglet === 'stock' && (vueStock === 'partenaires' || !Droits.achat())) { vueStock = 'partenaires'; renderFiltres(); Partenaires.rendre(); return; }
   const tab = TABS[current];
@@ -529,7 +531,6 @@ function renderFiltres() {
     const n = v => cmd.filter(VUES_COMMANDE[v]).length;
     html = `<div class="segmented">${['Offres', 'Commandes', 'Livraisons'].map(v =>
       `<button type="button" data-vuecmd="${v}" class="${v === vueCommande ? 'active' : ''}">${v} (${n(v)})</button>`).join('')}</div>
-      ${vueCommande === 'Livraisons' ? '<div class="chips"><button type="button" id="btn-export-fac" class="chip">Exporter les factures (comptable)</button></div>' : ''}
       ${n('Annulées') ? `<div class="chips"><button type="button" data-vuecmd="Annulées" class="chip${vueCommande === 'Annulées' ? ' active' : ''}">Annulées (${n('Annulées')})</button></div>` : ''}`;
   } else if (onglet === 'planning') {
     html = `<div class="chips">${Object.keys(FILTRES_RDV).map(f =>
@@ -560,8 +561,7 @@ function renderFiltres() {
       <label>Année min<input data-f="anneeMin" type="number" inputmode="numeric" value="${esc(f.anneeMin)}" placeholder="ex. 2015"></label>
       <label>Année max<input data-f="anneeMax" type="number" inputmode="numeric" value="${esc(f.anneeMax)}" placeholder="ex. 2022"></label>
       <label>Km max<input data-f="kmMax" type="number" inputmode="numeric" step="10000" value="${esc(f.kmMax)}" placeholder="ex. 100000"></label>
-      <button type="button" id="btn-reset-filtres" class="chip">Effacer</button></div>
-      <div class="chips"><button type="button" id="btn-police" class="chip">📖 Livre de police</button></div>`;
+      <button type="button" id="btn-reset-filtres" class="chip">Effacer</button></div>`;
   }
   box.innerHTML = html;
 }
@@ -1191,8 +1191,6 @@ $('#filters').addEventListener('click', e => {
   else if (b.dataset.vuestock) vueStock = b.dataset.vuestock;
   else if (b.dataset.vuedepot) vueDepot = b.dataset.vuedepot;
   else if (b.dataset.reprise) filtreReprise = b.dataset.reprise;
-  else if (b.id === 'btn-police') { Papiers.ouvrirPolice(); return; }
-  else if (b.id === 'btn-export-fac') { Facture.exporter(); return; }
   else if (b.id === 'btn-reset-filtres') Object.assign(filtresStock, { couleur: '', type: '', anneeMin: '', anneeMax: '', kmMax: '' });
   else return;
   render();
@@ -1243,7 +1241,8 @@ db.load();
 // Icônes des onglets et des boutons.
 document.querySelectorAll('[data-tab]').forEach(b => {
   const o = ONGLETS[b.dataset.tab];
-  b.innerHTML = icon(o.icon, b.closest('#bottom-tabs') ? 22 : 18) + '<span>' + o.label + '</span>';
+  const bas = !!b.closest('#bottom-tabs');
+  b.innerHTML = icon(o.icon, bas ? 22 : 18) + '<span>' + (bas && o.court || o.label) + '</span>';
 });
 $('#btn-menu').innerHTML = icon('reglages', 20);
 $('#btn-loupe').innerHTML = icon('recherche', 20);
@@ -1280,6 +1279,7 @@ EnLigne.init();
 Reseau.init();
 Revision.init();
 Import.init();
+Administratif.init();
 let redim = null;
 window.addEventListener('resize', () => { clearTimeout(redim); if (onglet === 'donnees') redim = setTimeout(render, 150); });
 $('#dlg-photos').addEventListener('close', () => {

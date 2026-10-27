@@ -117,7 +117,7 @@ const Demo = (() => {
     // Livre de police de la démo : chaque véhicule acheté a son vendeur et sa pièce d'identité.
     const pieces = ["Carte d'identité", 'Permis de conduire', 'Passeport'];
     vehicules.filter(x => !REPRISE.includes(x.statut)).forEach((x, i) => {
-      if (!x.vendeurId) Object.assign(x, { vendeurId: clients[(i + 3) % clients.length].id, achatPaiement: i % 3 ? 'Virement' : 'Chèque',
+      if (!x.vendeurPieceNumero) Object.assign(x, { vendeurId: x.vendeurId || clients[(i + 3) % clients.length].id, achatPaiement: x.mode === 'depot' ? '' : i % 3 ? 'Virement' : 'Chèque',
         vendeurPieceType: pieces[i % 3], vendeurPieceNumero: (i * 7919 + 104729).toString(36).toUpperCase().padStart(9, 'X'),
         vendeurPieceDate: jour(-1500 - i * 90), vendeurPieceAutorite: 'Préfecture de La Réunion' });
       if (!x.immatriculation) x.immatriculation = `${'FGHJKL'[i % 6]}${'ABCDEF'[(i * 5) % 6]}-${String(100 + i * 37).slice(0, 3)}-RE`;
@@ -147,6 +147,17 @@ const Demo = (() => {
       commande(vehicules[3], 'Fontaine', 'Offre', jour(-1)),
     ];
     const offreAncienne = commandes[commandes.length - 2];
+    // Paperasse de la démo (onglet Administratif) : déclarations SIV, factures et CT faits, sauf pour les achats et ventes récents.
+    const ilYa = d => (Date.now() - new Date(d + 'T12:00')) / 864e5;
+    vehicules.filter(x => !REPRISE.includes(x.statut) && x.mode !== 'depot' && x.dateEntree && ilYa(x.dateEntree) > 12).forEach(x => { x.daSiv = x.dateEntree; });
+    ventes.filter(x => x.il > 12).forEach(x => { x.v.cessionSiv = x.v.dateVente; });
+    const facs = {};
+    commandes.filter(o => o.statut === 'Livrée' && ilYa(o.dateLivree) > 12).sort((a, b) => a.dateLivree.localeCompare(b.dateLivree)).forEach(o => {
+      const an = o.dateLivree.slice(0, 4);
+      facs[an] = (facs[an] || 0) + 1;
+      Object.assign(o, { factureNumero: `FAC-${an}-${String(facs[an]).padStart(4, '0')}`, factureDate: o.dateLivree, regimeTva: 'marge' });
+    });
+    vehicules.filter(x => DISPONIBLE.includes(x.statut) || x.statut === 'Réservé').forEach((x, i) => { if (i % 3) x.ctDate = jour(-20 - i * 9); });
     const planning = [
       fiche({ type: 'Relance client', date: jour(-2), heure: '10:00', clientId: C['Rivière'], commandeId: offreAncienne.id, notes: 'Relancer pour la Clio', fait: false }),
       fiche({ type: 'Essai', date: jour(1), heure: '14:30', clientId: C['Boyer'], vehiculeId: vehicules[2].id, fait: false }),

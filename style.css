@@ -664,3 +664,31 @@ body[data-onglet="leads"] .toolbar, body[data-onglet="leads"] #filters, body[dat
 /* Stock > Partenaires. */
 .card.partenaire .thumb img { max-height: 130px; width: 100%; object-fit: cover; }
 p.alerte { color: var(--orange); }
+
+/* Onglet Administratif : à faire, dossiers des véhicules, registres, garage. */
+#page-administratif { display: none; }
+body[data-onglet="administratif"] #page-administratif { display: grid; gap: 14px; }
+body[data-onglet="administratif"] .toolbar, body[data-onglet="administratif"] #filters,
+body[data-onglet="administratif"] #count, body[data-onglet="administratif"] #list { display: none; }
+#adm { display: grid; gap: 12px; min-width: 0; }
+#adm > .muted { margin: 0; }
+.segmented .adm-pastille, .adm-pastille { display: inline-grid; width: auto; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 99px;
+  background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }
+.adm-tache { border-left: 4px solid var(--line); }
+.adm-tache.retard { border-left-color: var(--danger); }
+.adm-tache.bientot { border-left-color: var(--orange); }
+.adm-tache .title { white-space: normal; }
+.adm-tache .chips, .adm-dossier .chips { margin-top: 8px; }
+.adm-ct { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.adm-ct input { width: auto; padding: 5px 8px; }
+.adm-ligne { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 8px; align-items: start; margin-top: 8px; }
+.adm-ligne .chips { margin: 0; align-items: center; }
+.adm-l { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 7px; }
+.adm-etape.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.adm-etape.manque { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 50%, var(--line)); }
+.adm-grille { display: grid; }
+.adm-regles { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: 13.5px; }
+.adm-factures { margin-top: 10px; }
+#adm-docs h2 { margin: 0 0 4px; font-size: 17px; }
+#adm-docs > .muted { margin: 0 0 12px; font-size: 13.5px; }
+@media (max-width: 560px) { .adm-ligne { grid-template-columns: minmax(0, 1fr); gap: 2px; } .adm-l { padding-top: 0; } }
