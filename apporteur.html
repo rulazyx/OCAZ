@@ -17,59 +17,19 @@
 <link rel="stylesheet" href="apporteur.css">
 </head>
 <body class="ap verrouille">
-<div id="auth">
-  <div class="auth-carte ap-carte large">
+<!-- Plus d'inscription libre : les comptes apporteurs sont créés par l'administrateur. Cette carte ne sert qu'au
+     mot de passe de départ à remplacer (première connexion), et reste cachée sinon. -->
+<div id="auth" hidden>
+  <form id="f-mdp" class="auth-carte ap-carte" novalidate>
     <img src="logo.svg" alt="" width="64" height="64">
-    <h1><span class="brand-name">OCAZ</span> Apporteur d'affaires</h1>
-    <p class="muted" id="auth-texte">Inscription gratuite. Présente les véhicules des garages du réseau à tes contacts et touche une commission sur chaque vente conclue.</p>
-    <p class="hint auth-aide" data-nouveau-compte>Déjà inscrit ? <a href="./?espace=apporteur">Se connecter</a> (même connexion que les garages).</p>
-
-    <form id="f-inscription" class="stack" novalidate>
-      <h3 class="section">1. Toi</h3>
-      <div class="grid">
-        <div class="field"><label for="i-prenom">Prénom *</label><input id="i-prenom" data-i="prenom" autocomplete="given-name"></div>
-        <div class="field"><label for="i-nom">Nom *</label><input id="i-nom" data-i="nom" autocomplete="family-name"></div>
-        <div class="field"><label for="i-telephone">Téléphone *</label><input id="i-telephone" data-i="telephone" type="tel" autocomplete="tel"></div>
-        <div class="field" data-nouveau-compte><label for="i-email">Email *</label><input id="i-email" type="email" autocomplete="email" autocapitalize="none"></div>
-        <div class="field full"><label for="i-adresse">Adresse</label><input id="i-adresse" data-i="adresse" autocomplete="street-address"></div>
-        <div class="field"><label for="i-code_postal">Code postal</label><input id="i-code_postal" data-i="code_postal" inputmode="numeric" autocomplete="postal-code"></div>
-        <div class="field"><label for="i-ville">Ville</label><input id="i-ville" data-i="ville" autocomplete="address-level2"></div>
-      </div>
-      <h3 class="section">2. Ton statut d'apporteur d'affaires</h3>
-      <p class="hint">Pour être payé d'une commission, il faut une immatriculation : la micro-entreprise se crée gratuitement en ligne sur autoentrepreneur.urssaf.fr. Tu peux t'inscrire avant et ajouter ton SIRET ensuite.</p>
-      <div class="ap-formes">
-        <label class="check"><input type="radio" name="forme" value="micro" checked><span><b>Micro-entrepreneur</b><small>TVA non applicable (art. 293 B du CGI)</small></span></label>
-        <label class="check"><input type="radio" name="forme" value="societe"><span><b>Société</b><small>SARL, SAS, EURL…</small></span></label>
-        <label class="check"><input type="radio" name="forme" value="en_cours"><span><b>Immatriculation en cours</b><small>SIRET à ajouter avant ta 1re facture</small></span></label>
-      </div>
-      <div class="grid">
-        <div class="field" id="i-champ-siret"><label for="i-siret">SIRET (14 chiffres) *</label><input id="i-siret" data-i="siret" inputmode="numeric"></div>
-        <div class="field" id="i-champ-rs" hidden><label for="i-raison_sociale">Nom de la société</label><input id="i-raison_sociale" data-i="raison_sociale"></div>
-        <div class="field" id="i-champ-tva" hidden><label for="i-tva">N° de TVA (si assujetti)</label><input id="i-tva" data-i="tva"></div>
-      </div>
-      <h3 class="section">3. Ton RIB <span class="hint">(facultatif maintenant)</span></h3>
-      <p class="hint">Les garages te versent la commission directement par virement. Ton RIB n'est montré qu'au garage d'une vente conclue.</p>
-      <div class="grid">
-        <div class="field full"><label for="i-iban">IBAN</label><input id="i-iban" data-i="iban" autocapitalize="characters" spellcheck="false"></div>
-        <div class="field"><label for="i-bic">BIC</label><input id="i-bic" data-i="bic" autocapitalize="characters" spellcheck="false"></div>
-        <div class="field"><label for="i-titulaire">Titulaire du compte</label><input id="i-titulaire" data-i="titulaire"></div>
-      </div>
-      <h3 class="section">4. Contrat d'apporteur d'affaires</h3>
-      <div class="ap-contrat" id="i-contrat" tabindex="0"></div>
-      <label class="check"><input type="checkbox" id="i-accepte"><span>J'ai lu le contrat d'apporteur d'affaires du réseau Ocaz et je l'accepte, ainsi que les <a href="https://ocaz.re/cgu" target="_blank">CGU</a> et la <a href="https://ocaz.re/confidentialite" target="_blank">politique de confidentialité</a>.</span></label>
-      <label class="check"><input type="checkbox" id="i-certifie"><span>Je certifie l'exactitude de ces informations et je déclarerai moi-même mes commissions (URSSAF, impôts).</span></label>
-      <div class="field"><label for="i-signature">Signature : tape ton prénom et ton nom *</label><input id="i-signature" autocomplete="name"></div>
-      <h3 class="section" data-nouveau-compte>5. Ton mot de passe</h3>
-      <div class="grid" data-nouveau-compte>
-        <div class="field"><label for="i-mdp">Mot de passe (8 caractères min.) *</label><input id="i-mdp" type="password" autocomplete="new-password"></div>
-        <div class="field"><label for="i-mdp2">Confirme *</label><input id="i-mdp2" type="password" autocomplete="new-password"></div>
-      </div>
-      <button type="submit" class="primary" id="i-ok">Signer et créer mon compte</button>
-    </form>
-
+    <h1><span class="brand-name">OCAZ</span> <span class="ap-marque">Apporteur</span></h1>
+    <p class="muted" id="auth-texte">Première connexion : choisis ton mot de passe (8 caractères minimum).</p>
+    <div class="field"><label for="n-mdp">Nouveau mot de passe</label><input id="n-mdp" type="password" autocomplete="new-password"></div>
+    <div class="field"><label for="n-mdp2">Confirme le mot de passe</label><input id="n-mdp2" type="password" autocomplete="new-password"></div>
     <p id="auth-erreur" class="auth-erreur" role="alert" hidden></p>
-    <button type="button" id="auth-sortir" class="lien" hidden>Se déconnecter</button>
-  </div>
+    <button type="submit" class="primary" id="n-ok">Enregistrer mon mot de passe</button>
+    <button type="button" id="auth-sortir" class="lien">Se déconnecter</button>
+  </form>
 </div>
 
 <header>

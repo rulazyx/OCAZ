@@ -1,6 +1,9 @@
 // Parcours de reprise en deux pages :
 // 1) les infos minimales pour coter le véhicule (comme sur La Centrale / Leboncoin),
 // 2) la fiche reprise : cote, frais, hausse Réunion, fourchette de reprise et prix saisi à la main.
+// « Valider » range la reprise dans les reprises validées, sans la passer en préparation : elle se choisit
+// ensuite dans une offre, et c'est le passage de l'offre en commande qui la fait entrer en préparation.
+// Le dépôt-vente a son propre onglet (depotvente.js).
 const Reprise = (() => {
   // Hausse des prix à La Réunion et marge visée : réglées dans Paramètres, partagées par l'équipe.
   const reglages = () => Param.get().reprise;
@@ -33,14 +36,25 @@ const Reprise = (() => {
   const liste = (k, l, opts) => `<div class="field"><label for="r-${k}">${l}</label>
     <select id="r-${k}" data-r="${k}">${opts.map(o => `<option${o === (etat[k] || '') ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
 
-  // Page 1 : infos minimales demandées par les sites de cote.
+  // Boutons du bas : Retour, Enregistrer pour plus tard, Coter (page 1) ou Valider (page 2).
+  // Une reprise déjà enregistrée peut être annulée (ou remise en cours si elle l'était).
+  function boutons(page) {
+    page_ = page;
+    const enCours = etat.statut === 'Reprise à étudier';
+    $('#r-btn-suivant').hidden = page !== 1;
+    $('#r-btn-valider').hidden = page !== 2 || !enCours;
+    $('#r-btn-enregistrer').textContent = enCours ? 'Enregistrer pour plus tard' : 'Enregistrer';
+    const annuler = $('#r-btn-annuler');
+    annuler.hidden = !etat.id || !['Reprise à étudier', 'Reprise validée', 'Reprise refusée'].includes(etat.statut);
+    annuler.textContent = etat.statut === 'Reprise refusée' ? 'Remettre en cours' : 'Annuler la reprise';
+    annuler.className = etat.statut === 'Reprise refusée' ? '' : 'danger';
+  }
+  let page_ = 1;
+
+  // Page 1 : infos minimales demandées par les sites de cote (le vendeur n'est pas demandé : c'est le client de l'offre).
   function page1() {
-    const depot = Depot.est(etat);
-    $('#reprise-titre').textContent = etat.id ? 'Modifier' : depot ? 'Nouveau dépôt-vente' : 'Nouvelle reprise';
-    const clients = db.all('clients').slice().sort((a, b) => norm(clientNom(a)).localeCompare(norm(clientNom(b))));
+    $('#reprise-titre').textContent = etat.id ? 'Modifier la reprise' : 'Nouvelle reprise';
     $('#reprise-body').innerHTML = `
-      ${etat.statut === 'Reprise à étudier' ? `<div class="segmented mode-choix"><button type="button" data-mode="achat" class="${depot ? '' : 'active'}">Achat / reprise</button>
-        <button type="button" data-mode="depot" class="${depot ? 'active' : ''}">Dépôt-vente</button></div>` : ''}
       ${etat.image ? `<div class="vehicule-image"><img src="${esc(etat.image)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
       <div class="lookup">
         <div class="field"><label for="r-immatriculation">Plaque d'immatriculation</label>
@@ -54,53 +68,20 @@ const Reprise = (() => {
         <div class="field full"><label for="r-finition">Version / finition</label><input id="r-finition" data-r="finition" value="${esc(etat.finition || '')}" placeholder="ex. 1.5 dCi 90 Intens"></div>
         ${champ('annee', 'Année *', 'number')}${champ('kilometrage', 'Kilométrage *', 'number')}
         ${liste('carburant', 'Carburant *', CARBURANTS)}${liste('boite', 'Boîte *', BOITES)}
-        <div class="field full"><label for="r-vendeurId">${depot ? 'Propriétaire (client qui confie le véhicule)' : 'Vendeur (client qui cède le véhicule)'}</label>
-          <select id="r-vendeurId" data-r="vendeurId"><option value="">Aucun pour l'instant</option>${clients.map(c =>
-            `<option value="${c.id}"${c.id === etat.vendeurId ? ' selected' : ''}>${esc(clientNom(c))}</option>`).join('')}</select></div>
       </div>`;
-    $('#r-btn-suivant').hidden = false;
-    $('#r-btn-suivant').textContent = depot ? 'Créer le dépôt →' : 'Créer et coter →';
-    ['#r-btn-valider', '#r-btn-refuser', '#r-btn-enregistrer', '#r-btn-supprimer'].forEach(s => { $(s).hidden = true; });
+    boutons(1);
   }
 
-  // Page 2 : fiche reprise.
-  // Page 2 d'un dépôt-vente : le mandat au lieu de la cote et du prix de reprise.
-  function page2Depot() {
-    const v = etat;
-    const proprio = db.get('clients', v.vendeurId);
-    $('#reprise-titre').textContent = 'Dépôt-vente';
-    $('#reprise-body').innerHTML = `
-      <div class="o-choix">${v.image ? `<img src="${esc(v.image)}" alt="" onerror="this.remove()">` : ''}
-        <div><strong>${esc(vehiculeNom(v))}</strong>
-        <span class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite].filter(Boolean).join(' · '))}</span>
-        <span class="sub">${v.immatriculation ? esc(v.immatriculation) + ' · ' : ''}${proprio ? 'Propriétaire : ' + esc(clientNom(proprio)) : 'Pas de propriétaire'}</span></div>
-        <button type="button" class="chip" id="r-btn-modifier">Modifier</button></div>
-      ${Depot.page2(v)}
-      <div class="field"><label for="r-defauts">État, défauts constatés, notes</label><textarea id="r-defauts" data-r="defauts">${esc(v.defauts || '')}</textarea></div>
-      ${Papiers.champsAchat(v)}
-      ${Papiers.section(db.get('vehicules', v.id))}`;
-    $('#r-btn-suivant').hidden = true;
-    const enCours = v.statut === 'Reprise à étudier';
-    $('#r-btn-valider').hidden = !enCours;
-    $('#r-btn-valider').textContent = 'Valider le dépôt → en stock';
-    $('#r-btn-refuser').hidden = !enCours;
-    $('#r-btn-enregistrer').hidden = false;
-    $('#r-btn-supprimer').hidden = false;
-  }
-
+  // Page 2 : fiche reprise (cote, frais, prix de reprise).
   function page2() {
-    if (Depot.est(etat)) { page2Depot(); return; }
-    $('#r-btn-valider').textContent = 'Valider la reprise → préparation';
     const v = etat;
     const c = calcul(v);
-    const vendeur = db.get('clients', v.vendeurId);
-    const modele = [v.marque, v.modele, v.finition, v.annee].filter(Boolean).join(' ');
-    $('#reprise-titre').textContent = 'Fiche reprise';
+    $('#reprise-titre').textContent = 'Fiche reprise' + (v.statut !== 'Reprise à étudier' ? ' · ' + libStatut(v.statut).replace('Reprise ', '') : '');
     $('#reprise-body').innerHTML = `
       <div class="o-choix">${v.image ? `<img src="${esc(v.image)}" alt="" onerror="this.remove()">` : ''}
         <div><strong>${esc(vehiculeNom(v))}</strong>
         <span class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite].filter(Boolean).join(' · '))}</span>
-        <span class="sub">${v.immatriculation ? esc(v.immatriculation) + ' · ' : ''}${vendeur ? 'Vendeur : ' + esc(clientNom(vendeur)) : 'Pas de vendeur'}</span></div>
+        <span class="sub">${v.immatriculation ? esc(v.immatriculation) : 'Sans plaque'}</span></div>
         <button type="button" class="chip" id="r-btn-modifier">Modifier</button></div>
 
       <h3 class="section">Cote</h3>
@@ -131,14 +112,8 @@ const Reprise = (() => {
       <div class="field"><label for="r-prixPropose">Prix de reprise proposé (€)</label>
         <input id="r-prixPropose" data-r="prixPropose" type="number" inputmode="decimal" class="r-prix" value="${esc(v.prixPropose || '')}" placeholder="À saisir"></div>
       <div class="field"><label for="r-defauts">Défauts constatés / notes</label><textarea id="r-defauts" data-r="defauts">${esc(v.defauts || '')}</textarea></div>
-      ${Papiers.champsAchat(v)}
-      ${Papiers.section(db.get('vehicules', v.id))}`;
-    $('#r-btn-suivant').hidden = true;
-    const enCours = v.statut === 'Reprise à étudier';
-    $('#r-btn-valider').hidden = !enCours;
-    $('#r-btn-refuser').hidden = !enCours;
-    $('#r-btn-enregistrer').hidden = false;
-    $('#r-btn-supprimer').hidden = false;
+      ${v.statut === 'Reprise validée' ? '<p class="hint">Reprise validée : choisis-la dans « Véhicule repris » d\'une offre. Quand l\'offre passe en commande, le véhicule entre en préparation.</p>' : ''}`;
+    boutons(2);
   }
 
   function fourchetteHtml(c) {
@@ -156,7 +131,7 @@ const Reprise = (() => {
   }
 
   function ouvrir(id, preset = {}) {
-    etat = id ? { ...db.get('vehicules', id) } : { statut: 'Reprise à étudier', mode: Param.get().activite.mode, ...preset };
+    etat = id ? { ...db.get('vehicules', id) } : { statut: 'Reprise à étudier', mode: 'achat', ...preset };
     extra = {}; trouve = '';
     if (id) page2(); else page1();
     $('#dlg-reprise').showModal();
@@ -173,26 +148,6 @@ const Reprise = (() => {
     return saved;
   }
 
-  // Dépôt validé : mandat daté, véhicule en stock, ligne au livre de police, fin du mandat au planning.
-  function validerDepot() {
-    document.querySelectorAll('#reprise-body [data-r]').forEach(i => { etat[i.dataset.r] = i.value; });
-    if (!num(etat.prixVente)) { toast('Saisis le prix de vente affiché avant de valider.'); $('#r-prixVente')?.focus(); return; }
-    if (etat.commissionType === 'net' && !num(etat.prixNetVendeur)) { toast('Saisis le net vendeur garanti.'); return; }
-    if ((!etat.vendeurId || !etat.vendeurPieceNumero) && !confirm("Le livre de police demande le propriétaire et le numéro de sa pièce d'identité. Valider quand même et compléter plus tard ?")) return;
-    const debut = etat.mandatDebut || today();
-    const saved = enregistrer({ statut: 'En stock', dateEntree: etat.dateEntree || today(), achatDate: etat.achatDate || today(), mandatDebut: debut,
-      mandatFin: Depot.finMandat({ ...etat, mandatDebut: debut, mandatFin: '' }) });
-    Papiers.apresAchat(saved);
-    const v = db.get('vehicules', saved.id);
-    db.upsert('planning', { type: 'Autre', date: v.mandatFin, heure: '', clientId: v.vendeurId || '', vehiculeId: v.id, fait: false,
-      notes: `Fin du mandat de dépôt-vente : prolonger ou rendre le véhicule` });
-    $('#dlg-reprise').close();
-    toast('Dépôt validé : le véhicule est en stock. Imprime le mandat depuis sa fiche.');
-    vueStock = 'stock';
-    switchTab('stock');
-    setTimeout(() => alerteRecherche(v), 2800);
-  }
-
   function init() {
     const body = $('#reprise-body');
     body.addEventListener('input', e => {
@@ -200,19 +155,13 @@ const Reprise = (() => {
       if (!k) return;
       etat[k] = e.target.value;
       if ($('#r-fourchette')) majCalcul();
-      if ($('#depot-resume')) $('#depot-resume').innerHTML = Depot.resume(etat);
     });
     body.addEventListener('change', e => {
       const k = e.target.dataset.r;
-      if (!k) return;
-      etat[k] = e.target.value;
-      // Le type de commission change les champs à remplir.
-      if (k === 'commissionType') { delete etat.commissionValeur; page2Depot(); }
+      if (k) etat[k] = e.target.value;
     });
     body.addEventListener('click', async e => {
-      const mode = e.target.closest('[data-mode]');
-      if (mode) { etat.mode = mode.dataset.mode; page1(); return; }
-      if (e.target.id === 'r-btn-modifier') { page1(); $('#r-btn-suivant').textContent = 'Enregistrer et revenir →'; return; }
+      if (e.target.id === 'r-btn-modifier') { page1(); return; }
       const site = e.target.dataset.coteSite;
       if (site) {
         const q = [etat.marque, etat.modele, etat.finition, etat.annee].filter(Boolean).join(' ');
@@ -250,45 +199,57 @@ const Reprise = (() => {
         }
       }
     });
-    $('#r-btn-suivant').addEventListener('click', () => {
+    // Coter : les infos de la page 1 sont obligatoires.
+    const verifier = () => {
       const manque = ['marque', 'modele', 'annee', 'kilometrage', 'carburant', 'boite'].filter(k => !String(etat[k] || '').trim());
-      if (manque.length) { toast('Il manque : ' + manque.join(', ')); return; }
+      if (manque.length) { toast('Il manque : ' + manque.join(', ')); return false; }
       if (etat.immatriculation) etat.immatriculation = formatPlaque(etat.immatriculation);
       const dup = etat.immatriculation && db.all('vehicules').find(v => v.immatriculation === etat.immatriculation && v.id !== etat.id);
-      if (dup && !confirm(`La plaque ${etat.immatriculation} existe déjà (${vehiculeNom(dup)}). Continuer ?`)) return;
+      return !dup || confirm(`La plaque ${etat.immatriculation} existe déjà (${vehiculeNom(dup)}). Continuer ?`);
+    };
+    const fermer = () => { $('#dlg-reprise').close(); render(); };
+    $('#r-btn-suivant').addEventListener('click', () => {
+      if (!verifier()) return;
       const nouveau = !etat.id;
       const saved = enregistrer();
       page2();
       render();
       if (nouveau) alerteRecherche(saved);
     });
-    $('#r-btn-enregistrer').addEventListener('click', () => { enregistrer(); $('#dlg-reprise').close(); toast('Reprise enregistrée'); render(); });
-    $('#r-btn-refuser').addEventListener('click', () => { enregistrer({ statut: 'Reprise refusée' }); $('#dlg-reprise').close(); toast('Reprise refusée'); render(); });
+    $('#r-btn-retour').addEventListener('click', () => { if (page_ === 2) page1(); else fermer(); });
+    $('#r-btn-enregistrer').addEventListener('click', () => {
+      if (!String(etat.marque || etat.immatriculation || '').trim()) { toast('Indique au moins la plaque ou la marque.'); return; }
+      if (etat.immatriculation) etat.immatriculation = formatPlaque(etat.immatriculation);
+      enregistrer();
+      toast(etat.statut === 'Reprise à étudier' ? 'Reprise enregistrée : retrouve-la dans les reprises en cours' : 'Reprise enregistrée');
+      fermer();
+    });
     $('#r-btn-valider').addEventListener('click', () => {
-      if (Depot.est(etat)) { validerDepot(); return; }
+      if (!verifier()) return;
       if (!num(etat.prixPropose)) { toast('Saisis le prix de reprise avant de valider.'); $('#r-prixPropose')?.focus(); return; }
-      // Champs du livre de police pré-remplis depuis le client : ils comptent même s'ils n'ont pas été retouchés.
-      document.querySelectorAll('#reprise-body [data-r^="vendeurPiece"], #reprise-body [data-r^="achat"]').forEach(i => { etat[i.dataset.r] = i.value; });
-      if ((!etat.vendeurId || !etat.vendeurPieceNumero) && !confirm("Le livre de police demande le vendeur et le numéro de sa pièce d'identité. Valider quand même et compléter plus tard ?")) return;
-      const saved = enregistrer({ statut: 'En préparation', prixAchat: etat.prixAchat || etat.prixPropose, dateEntree: etat.dateEntree || today(), achatDate: etat.achatDate || today() });
-      Papiers.apresAchat(saved);
+      const saved = enregistrer({ statut: 'Reprise validée' });
       setTimeout(() => alerteRecherche(saved), 2800);
-      $('#dlg-reprise').close();
-      toast('Reprise validée : le véhicule passe en préparation');
-      switchTab('stock');
-      vueStock = 'preparation';
-      render();
+      filtreReprise = 'Reprises validées';
+      toast('Reprise validée : tu peux l\'ajouter dans une offre');
+      fermer();
     });
-    $('#r-btn-supprimer').addEventListener('click', () => {
-      const ok = TABS.vehicules.canDelete(etat);
-      if (ok !== true) { toast(ok); return; }
-      if (!confirm('Supprimer définitivement cette reprise ?')) return;
-      db.remove('vehicules', etat.id);
-      TABS.vehicules.afterDelete(etat);
-      $('#dlg-reprise').close();
-      render();
+    $('#r-btn-annuler').addEventListener('click', () => {
+      if (etat.statut === 'Reprise refusée') {
+        enregistrer({ statut: 'Reprise à étudier' });
+        filtreReprise = 'Reprises en cours';
+        toast('Reprise remise en cours');
+        fermer();
+        return;
+      }
+      const ventes = db.all('commandes').filter(o => o.repriseId === etat.id && o.statut !== 'Annulée');
+      if (ventes.length) { toast(`Cette reprise est dans ${ventes.map(o => o.numero).join(', ')} : retire-la d'abord de l'offre.`); return; }
+      if (!confirm('Annuler cette reprise ? Elle reste visible dans les reprises annulées.')) return;
+      enregistrer({ statut: 'Reprise refusée' });
+      filtreReprise = 'Reprises annulées';
+      toast('Reprise annulée');
+      fermer();
     });
-    $('#r-btn-fermer').addEventListener('click', () => { $('#dlg-reprise').close(); render(); });
+    $('#r-btn-fermer').addEventListener('click', fermer);
   }
 
   return { ouvrir, init, reglages };

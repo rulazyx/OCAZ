@@ -19,7 +19,6 @@ const Reseau = (() => {
   const commission = v => Commission.montant(reglages(), v.prixVente, v.commissionReseau);
   const chiffres = s => String(s || '').replace(/\D/g, '');
   const apporteurNom = a => [a?.prenom, a?.nom].filter(Boolean).join(' ') || a?.email || 'apporteur';
-  const lienInscription = () => location.origin + location.pathname.replace(/[^/]*$/, '') + 'apporteur?inscription';
 
   // Copie publiée : infos publiques du garage et véhicules partagés (sans prix d'achat ni données clients).
   function copie() {
@@ -255,59 +254,12 @@ const Reseau = (() => {
         <span class="hint">Commission pour ce véhicule (€), vide = règle du garage</span></div></div>`;
   }
 
-  // ---------- Paramètres ----------
-  function rendreParametres() {
-    const r = reglages();
-    $('#res-actif').checked = !!r.actif;
-    $('#res-type').value = r.commissionType;
-    $('#res-valeur').value = r.commissionValeur;
-    $('#res-min').value = r.commissionMin;
-    $('#res-defaut').checked = !!r.partageDefaut;
-    $('#res-conditions').textContent = Commission.CONDITIONS_GARAGE;
-    $('#res-min-champ').hidden = r.commissionType !== 'pourcentage';
-    const n = copie().vehicules.length;
-    $('#res-etat').textContent = r.actif ? `${n} véhicule(s) partagé(s)${r.accepteLe ? ' · conditions acceptées le ' + dateFr(r.accepteLe) : ''}` : 'Réseau désactivé : aucun véhicule partagé.';
-    $('#res-lien').value = lienInscription();
-  }
-  function enregistrer() {
-    const actifNouveau = $('#res-actif').checked;
-    if (actifNouveau && !reglages().accepteLe && !confirm('Rejoindre le réseau Ocaz :\n\n' + Commission.CONDITIONS_GARAGE + '\n\nTu acceptes ces conditions ?')) return;
-    const valeur = Number($('#res-valeur').value);
-    if (!(valeur >= 0)) { toast('Indique le montant ou le pourcentage de la commission.'); return; }
-    Param.save({ reseau: { ...reglages(), actif: actifNouveau, commissionType: $('#res-type').value, commissionValeur: valeur,
-      commissionMin: Number($('#res-min').value) || 0, partageDefaut: $('#res-defaut').checked, accepteLe: actifNouveau ? reglages().accepteLe || new Date().toISOString() : reglages().accepteLe } });
-    rendreParametres();
-    publier(true).then(() => toast(actifNouveau ? 'Réseau Ocaz activé : tes véhicules sont partagés' : 'Réseau Ocaz désactivé')).catch(err => toast(err.message));
-  }
-
-  // ---------- Super-admin : apporteurs inscrits ----------
-  async function afficherApporteurs() {
-    if (!Sync.profil.superadmin) return;
-    const box = $('#sa-apporteurs');
-    try {
-      const { data, error } = await Sync.client.rpc('crm_apporteurs_liste');
-      if (error) throw new Error(error.message);
-      box.innerHTML = (data || []).length ? data.map(a => `<div class="membre"><span>${esc([a.prenom, a.nom].join(' '))}${a.demo ? ' (démo)' : ''}
-          <small>${esc([a.email, a.telephone, a.ville, Commission.FORMES[a.forme], a.siret && 'SIRET ' + a.siret].filter(Boolean).join(' · '))} · ${a.leads} lead(s), ${a.ventes} vente(s)</small></span>
-        <span class="badge ${a.statut === 'actif' ? 'b-green' : 'b-red'}">${a.statut === 'actif' ? 'Actif' : 'Suspendu'}</span>
-        ${a.demo ? '' : `<button type="button" class="chip" data-app-statut="${esc(a.email)}" data-statut="${a.statut === 'actif' ? 'suspendu' : 'actif'}">${a.statut === 'actif' ? 'Suspendre' : 'Réactiver'}</button>`}</div>`).join('')
-        : '<p class="hint">Aucun apporteur inscrit pour le moment.</p>';
-    } catch (err) { box.textContent = /function|schema cache/i.test(err.message) ? 'Relance le script supabase.sql pour installer le réseau.' : err.message; }
-  }
+  // Le réseau (adhésion et commission) est réglé par l'administrateur pour chaque revendeur.
 
   function init() {
-    $('#btn-res-save').addEventListener('click', enregistrer);
-    $('#res-type').addEventListener('change', () => { $('#res-min-champ').hidden = $('#res-type').value !== 'pourcentage'; });
-    $('#btn-res-copier').addEventListener('click', () => navigator.clipboard?.writeText(lienInscription()).then(() => toast('Lien copié : envoie-le à tes apporteurs')));
     $('#lead-ok').addEventListener('click', validerDialogue);
     $('#lead-annuler').addEventListener('click', () => $('#dlg-lead').close());
-    $('#sa-apporteurs').addEventListener('click', async e => {
-      const b = e.target.closest('[data-app-statut]');
-      if (!b) return;
-      const { error } = await Sync.client.rpc('crm_apporteur_statut', { p_email: b.dataset.appStatut, p_statut: b.dataset.statut });
-      if (error) toast(error.message); else afficherApporteurs();
-    });
   }
 
-  return { init, demarrer, arreter, planifier, publier, charger, rendreLeads, panneau, clic, champVehicule, rendreParametres, afficherApporteurs, partage, actif };
+  return { init, demarrer, arreter, planifier, publier, charger, rendreLeads, panneau, clic, champVehicule, partage, actif };
 })();

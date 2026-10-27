@@ -14,6 +14,8 @@ const Sync = (() => {
   let entreprise = null; // { id, nom, demo }
   let profil = {}; // { superadmin, doit_changer_mdp }
   let apporteur = false; // le compte a aussi un espace apporteur d'affaires
+  let config = {}; // réglages posés par l'administrateur : infos légales, droits, packs (lecture seule ici)
+  let onConfig = () => {};
   let timer = null;
   let enCours = null;
   let onChange = () => {};
@@ -49,8 +51,9 @@ const Sync = (() => {
     return base + '#config=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify({ url: s.url, cle: s.cle })))));
   }
 
-  function init(cb) {
+  function init(cb, cbConfig) {
     onChange = cb || onChange;
+    onConfig = cbConfig || onConfig;
     lireLienConfig();
     const s = settings();
     if (!s.url || !s.cle || !window.supabase) { setStatus('off'); return; }
@@ -90,9 +93,12 @@ const Sync = (() => {
     }
     if (apporteur && (!data.role || prefere() === 'apporteur')) { location.replace('apporteur'); return; }
     if (!data || !data.role) { role = null; setStatus('refuse'); return; }
+    // L'administrateur arrive sur son interface (il peut passer à son garage avec le bouton ⇄).
+    if (data.superadmin && !data.doit_changer_mdp && prefere() !== 'garage') { location.replace('admin'); return; }
     role = data.role;
     entreprise = { id: data.entreprise_id, nom: data.nom, demo: !!data.demo };
     profil = { superadmin: !!data.superadmin, doit_changer_mdp: !!data.doit_changer_mdp && !data.demo };
+    majConfig(data.config);
     await pull();
     if (profil.doit_changer_mdp) setStatus('nouveau-mdp');
     client.channel('entreprise')
@@ -100,18 +106,31 @@ const Sync = (() => {
       .subscribe();
   }
 
+  function majConfig(c) {
+    const nouveau = c && typeof c === 'object' ? c : {};
+    if (JSON.stringify(nouveau) === JSON.stringify(config)) return;
+    config = nouveau;
+    onConfig(config);
+  }
+
   // Espace préféré d'un compte qui est à la fois garage et apporteur ('garage' ou 'apporteur').
   const prefere = () => { try { return localStorage.getItem('ocaz-espace') || ''; } catch (e) { return ''; } };
   const preferer = e => { try { localStorage.setItem('ocaz-espace', e); } catch (err) { /* rien */ } };
 
   // Identifiant sans @ (ex. « test » pour la démo) : compte interne de l'appli.
-  const versEmail = id => { const x = (id || '').trim().toLowerCase(); return x.includes('@') ? x : x + '@demo.crmzx.re'; };
+  // Certains identifiants courts (ex. « admin ») renvoient vers un vrai email, donné par la base.
+  async function versEmail(id) {
+    const x = (id || '').trim().toLowerCase();
+    if (x.includes('@')) return x;
+    try { const { data } = await client.rpc('crm_identifiant', { p_id: x }); if (data) return data; } catch (e) { /* base pas à jour */ }
+    return x + '@demo.crmzx.re';
+  }
   async function connecter(identifiant, motDePasse, garder = true) {
     if (!client) throw new Error("L'appli n'est pas encore reliée à sa base (voir Réglages techniques).");
     try { localStorage.setItem('crmzx-rester', garder ? '1' : '0'); } catch (e) { /* rien */ }
-    const email = versEmail(identifiant);
     const horsLigne = () => new Error('Connexion impossible : vérifie ta connexion internet, puis réessaie.');
     if (!navigator.onLine) throw horsLigne();
+    const email = await versEmail(identifiant);
     let error;
     try { ({ error } = await client.auth.signInWithPassword({ email, password: motDePasse })); }
     catch (e) { throw horsLigne(); }
@@ -142,7 +161,7 @@ const Sync = (() => {
 
   async function deconnecter() {
     if (client) await client.auth.signOut();
-    user = null; role = null; entreprise = null; profil = {}; apporteur = false;
+    user = null; role = null; entreprise = null; profil = {}; apporteur = false; config = {};
     setStatus('off');
   }
 
@@ -175,8 +194,9 @@ const Sync = (() => {
     if (!client || !role) return Promise.resolve();
     if (enCours) return enCours;
     enCours = (async () => {
-      const { data, error } = await ligne().select('data, updated_at').eq('id', entreprise.id).maybeSingle();
+      const { data, error } = await ligne().select('data, updated_at, config').eq('id', entreprise.id).maybeSingle();
       if (error) { console.error(error); setStatus('erreur'); return; }
+      majConfig(data?.config);
       const distant = data?.data || {};
       const fusionne = fusion(db.data, distant);
       if (!memes(fusionne, db.data)) {
@@ -211,12 +231,6 @@ const Sync = (() => {
     return data;
   }
   const ajouterMembre = (email, r) => rpc('crm_ajouter_membre', { p_email: email, p_role: r });
-  // Nom affiché de l'entreprise (modifiable dans Paramètres).
-  async function renommer(nom) {
-    if (!entreprise || !nom) return;
-    entreprise.nom = nom;
-    await ligne().update({ nom }).eq('id', entreprise.id);
-  }
   async function retirerMembre(email) {
     const { error } = await client.from('crm_membres').delete().eq('email', email);
     if (error) throw new Error(error.message);
@@ -224,7 +238,7 @@ const Sync = (() => {
 
   return {
     init, settings, saveSettings, configure, lienConfig, connecter, nouveauMotDePasse, creerGarage, garages, reinitMdp,
-    deconnecter, changed, pull, membres, ajouterMembre, retirerMembre, renommer, preferer,
-    get entreprise() { return entreprise; }, get profil() { return profil; }, get client() { return client; }, get user() { return user; }, get role() { return role; }, get apporteur() { return apporteur; }, get status() { return status; },
+    deconnecter, changed, pull, membres, ajouterMembre, retirerMembre, preferer, versEmail,
+    get entreprise() { return entreprise; }, get profil() { return profil; }, get client() { return client; }, get user() { return user; }, get role() { return role; }, get apporteur() { return apporteur; }, get config() { return config; }, get status() { return status; },
   };
 })();

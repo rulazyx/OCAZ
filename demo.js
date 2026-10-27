@@ -1,4 +1,4 @@
-// Données d'exemple du compte démo (identifiant « test ») : un petit garage de La Réunion fictif.
+// Données d'exemple du compte démo (identifiant « revendeur ») : un petit garage de La Réunion fictif.
 // Les dates sont calculées à partir d'aujourd'hui pour que l'accueil et le planning restent vivants.
 const Demo = (() => {
   const jour = n => { const d = new Date(); d.setDate(d.getDate() + n); return isoLocal(d); };
@@ -94,6 +94,8 @@ const Demo = (() => {
       v('Nissan', 'Qashqai', '1.3 DIG-T N-Connecta', 2020, 41000, 'Essence', 'Automatique', 'SUV / 4x4', 'Blanc', 'Réservé', 38, 16500, 21900, 500),
       v('Citroën', 'C3', '1.2 PureTech Feel', 2016, 98000, 'Essence', 'Manuelle', 'Citadine', 'Blanc', 'Reprise à étudier', null, '', '', '',
         { vendeurId: C['Técher'], coteLaCentrale: 7600, coteLeboncoin: 8200, fraisMecanique: 400, fraisCarrosserie: 300, fraisSupposes: 150, immatriculation: 'FA-512-RE' }),
+      v('Renault', 'Clio', '1.5 dCi 90 Zen', 2017, 88000, 'Diesel', 'Manuelle', 'Citadine', 'Gris', 'Reprise validée', null, '', '', '',
+        { vendeurId: C['Hoarau'], coteLaCentrale: 8400, coteLeboncoin: 8900, fraisMecanique: 300, fraisSupposes: 150, prixPropose: 6200, immatriculation: 'EY-208-RE' }),
     ];
     // Ventes livrées sur les 5 derniers mois.
     const ventes = [
@@ -111,7 +113,7 @@ const Demo = (() => {
       { mode: 'depot', vendeurId: C['Fontaine'], commissionType: 'pourcentage', commissionValeur: 8, commissionMin: 500, mandatDebut: jour(-25), mandatFin: jour(65) }));
     // Livre de police de la démo : chaque véhicule acheté a son vendeur et sa pièce d'identité.
     const pieces = ["Carte d'identité", 'Permis de conduire', 'Passeport'];
-    vehicules.filter(x => x.statut !== 'Reprise à étudier').forEach((x, i) => {
+    vehicules.filter(x => !REPRISE.includes(x.statut)).forEach((x, i) => {
       if (!x.vendeurId) Object.assign(x, { vendeurId: clients[(i + 3) % clients.length].id, achatPaiement: i % 3 ? 'Virement' : 'Chèque',
         vendeurPieceType: pieces[i % 3], vendeurPieceNumero: (i * 7919 + 104729).toString(36).toUpperCase().padStart(9, 'X'),
         vendeurPieceDate: jour(-1500 - i * 90), vendeurPieceAutorite: 'Préfecture de La Réunion' });

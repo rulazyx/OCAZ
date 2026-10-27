@@ -35,6 +35,9 @@ create table if not exists public.crm_membres (
 );
 alter table public.crm_membres add column if not exists doit_changer_mdp boolean not null default false;
 alter table public.crm_entreprises add column if not exists demo boolean not null default false;
+-- Réglages posés par l'administrateur pour chaque revendeur (infos légales, droits, packs) : le revendeur les lit,
+-- il ne peut pas les modifier (voir les droits de modification plus bas).
+alter table public.crm_entreprises add column if not exists config jsonb not null default '{}'::jsonb;
 
 -- Super-admin : crée les comptes des garages clients.
 create table if not exists public.crm_superadmins (email text primary key);
@@ -117,7 +120,8 @@ begin
   return json_build_object('role', m.role, 'apporteur', ap, 'entreprise_id', m.entreprise_id, 'doit_changer_mdp', m.doit_changer_mdp,
     'superadmin', public.crm_est_superadmin(),
     'nom', (select nom from public.crm_entreprises where id = m.entreprise_id),
-    'demo', (select demo from public.crm_entreprises where id = m.entreprise_id));
+    'demo', (select demo from public.crm_entreprises where id = m.entreprise_id),
+    'config', (select config from public.crm_entreprises where id = m.entreprise_id));
 end $$;
 
 drop function if exists public.crm_compte_existe(text);
@@ -183,15 +187,33 @@ end $$;
 revoke execute on function public.crm_creer_garage(text, text), public.crm_garages(), public.crm_ajouter_membre(text, text),
   public.crm_reinit_mdp(text), public.crm_moi(), public.crm_mdp_change() from public, anon;
 
--- Compte démo : identifiant « test », mot de passe « test » (garage fictif, données d'exemple ajoutées par l'appli).
+-- Compte démo : identifiant « revendeur », mot de passe « test » (garage fictif, données d'exemple ajoutées par l'appli).
+-- Il s'appelait « test » avant le 27/10/2026 : on le renomme. Ce n'est plus un compte admin.
 do $$
 declare eid uuid;
 begin
-  perform public.crm__utilisateur('test@demo.crmzx.re', 'test');
-  if not exists (select 1 from public.crm_membres where email = 'test@demo.crmzx.re') then
-    insert into public.crm_entreprises (nom, demo) values ('Garage Démo', true) returning id into eid;
-    insert into public.crm_membres (email, entreprise_id, role) values ('test@demo.crmzx.re', eid, 'admin');
+  if exists (select 1 from auth.users where lower(email) = 'test@demo.crmzx.re')
+     and not exists (select 1 from auth.users where lower(email) = 'revendeur@demo.crmzx.re') then
+    update auth.users set email = 'revendeur@demo.crmzx.re', updated_at = now() where lower(email) = 'test@demo.crmzx.re';
+    update auth.identities set identity_data = identity_data || '{"email": "revendeur@demo.crmzx.re"}'::jsonb
+      where provider = 'email' and lower(identity_data ->> 'email') = 'test@demo.crmzx.re';
   end if;
+  if not exists (select 1 from public.crm_membres where email = 'revendeur@demo.crmzx.re') then
+    update public.crm_membres set email = 'revendeur@demo.crmzx.re' where email = 'test@demo.crmzx.re';
+  end if;
+  perform public.crm__utilisateur('revendeur@demo.crmzx.re', 'test');
+  if not exists (select 1 from public.crm_membres where email = 'revendeur@demo.crmzx.re') then
+    insert into public.crm_entreprises (nom, demo) values ('Garage Démo', true) returning id into eid;
+    insert into public.crm_membres (email, entreprise_id, role) values ('revendeur@demo.crmzx.re', eid, 'vendeur');
+  end if;
+  update public.crm_membres set role = 'vendeur', doit_changer_mdp = false where email = 'revendeur@demo.crmzx.re';
+  -- La démo a tous les droits, pour tout montrer.
+  update public.crm_entreprises set config = jsonb_build_object(
+      'infos', jsonb_build_object('nom', 'Garage Démo', 'adresse', '12 rue du Port', 'codePostal', '97420', 'ville', 'Le Port',
+        'telephone', '0262 00 00 00', 'email', 'demo@ocaz.re', 'siret', '12345678900011'),
+      'droits', jsonb_build_object('reseau', true, 'depot', true, 'achat', true),
+      'reseau', jsonb_build_object('commissionType', 'fixe', 'commissionValeur', 300, 'commissionMin', 0))
+    where demo and config = '{}'::jsonb;
 end $$;
 
 alter table public.crm_entreprises enable row level security;
@@ -204,6 +226,9 @@ create policy "Entreprise : lecture" on public.crm_entreprises for select to aut
 drop policy if exists "Entreprise : modification" on public.crm_entreprises;
 create policy "Entreprise : modification" on public.crm_entreprises for update to authenticated
   using (id = public.crm_entreprise()) with check (id = public.crm_entreprise());
+-- Le revendeur ne modifie que ses données de travail : le nom, les droits et les infos légales viennent de l'administrateur.
+revoke update on public.crm_entreprises from anon, authenticated;
+grant update (data, updated_at) on public.crm_entreprises to authenticated;
 
 -- L'équipe voit ses collègues ; seul l'admin retire, et seulement dans sa propre entreprise.
 drop policy if exists "Membres : lecture" on public.crm_membres;
@@ -428,52 +453,9 @@ language sql immutable as $$
     'bic', left(upper(trim(p ->> 'bic')), 11), 'titulaire', left(trim(p ->> 'titulaire'), 80)));
 $$;
 
--- Inscription d'un apporteur (sans être connecté) : crée son compte de connexion et sa fiche.
-create or replace function public.crm_apporteur_inscription(p_email text, p_mdp text, p_infos jsonb, p_contrat text, p_signature text)
-returns boolean language plpgsql security definer set search_path = public, auth, extensions as $$
-declare e text := lower(trim(p_email)); c jsonb := public.crm__apporteur_champs(coalesce(p_infos, '{}'::jsonb));
-begin
-  if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or e like '%@demo.crmzx.re' then raise exception 'Email invalide'; end if;
-  if length(coalesce(p_mdp, '')) < 8 then raise exception 'Le mot de passe doit faire au moins 8 caractères.'; end if;
-  if coalesce(c ->> 'nom', '') = '' or coalesce(c ->> 'prenom', '') = '' or coalesce(c ->> 'telephone', '') = '' then raise exception 'Nom, prénom et téléphone sont obligatoires.'; end if;
-  if c ->> 'forme' in ('micro', 'societe') and coalesce(c ->> 'siret', '') !~ '^\d{14}$' then raise exception 'Le SIRET doit faire 14 chiffres.'; end if;
-  if coalesce(trim(p_signature), '') = '' or coalesce(p_contrat, '') = '' then raise exception 'Signe le contrat en tapant ton nom complet.'; end if;
-  if exists (select 1 from auth.users where lower(email) = e) then raise exception 'Cet email a déjà un compte : connecte-toi.'; end if;
-  -- Garde-fou contre les inscriptions en rafale.
-  if (select count(*) from public.crm_apporteurs where cree_le > now() - interval '1 hour') >= 30 then
-    raise exception 'Trop d''inscriptions en ce moment, réessaie dans une heure.';
-  end if;
-  perform public.crm__utilisateur(e, p_mdp);
-  insert into public.crm_apporteurs (email, prenom, nom, telephone, adresse, code_postal, ville, forme, raison_sociale, siret, tva,
-    iban, bic, titulaire, contrat_version, contrat_signe_le, signature)
-  values (e, c ->> 'prenom', c ->> 'nom', c ->> 'telephone', coalesce(c ->> 'adresse', ''), coalesce(c ->> 'code_postal', ''), coalesce(c ->> 'ville', ''),
-    coalesce(c ->> 'forme', 'micro'), coalesce(c ->> 'raison_sociale', ''), coalesce(c ->> 'siret', ''), coalesce(c ->> 'tva', ''),
-    coalesce(c ->> 'iban', ''), coalesce(c ->> 'bic', ''), coalesce(c ->> 'titulaire', ''), left(p_contrat, 20), now(), left(trim(p_signature), 120));
-  return true;
-end $$;
-grant execute on function public.crm_apporteur_inscription(text, text, jsonb, text, text) to anon, authenticated;
-
--- Compte existant (un garage par exemple) qui ouvre aussi son espace apporteur : même email, même mot de passe,
--- contrat signé en ligne. L'appli propose ensuite de passer d'un espace à l'autre.
-create or replace function public.crm_apporteur_activer(p_infos jsonb, p_contrat text, p_signature text)
-returns boolean language plpgsql security definer set search_path = public as $$
-declare e text := lower(auth.jwt() ->> 'email'); c jsonb := public.crm__apporteur_champs(coalesce(p_infos, '{}'::jsonb));
-begin
-  if auth.uid() is null or coalesce(e, '') = '' then raise exception 'Connecte-toi d''abord.'; end if;
-  if exists (select 1 from public.crm_apporteurs where email = e) then return true; end if;
-  if coalesce(c ->> 'nom', '') = '' or coalesce(c ->> 'prenom', '') = '' or coalesce(c ->> 'telephone', '') = '' then raise exception 'Nom, prénom et téléphone sont obligatoires.'; end if;
-  if c ->> 'forme' in ('micro', 'societe') and coalesce(c ->> 'siret', '') !~ '^\d{14}$' then raise exception 'Le SIRET doit faire 14 chiffres.'; end if;
-  if coalesce(trim(p_signature), '') = '' or coalesce(p_contrat, '') = '' then raise exception 'Signe le contrat en tapant ton nom complet.'; end if;
-  insert into public.crm_apporteurs (email, prenom, nom, telephone, adresse, code_postal, ville, forme, raison_sociale, siret, tva,
-    iban, bic, titulaire, contrat_version, contrat_signe_le, signature, demo)
-  values (e, c ->> 'prenom', c ->> 'nom', c ->> 'telephone', coalesce(c ->> 'adresse', ''), coalesce(c ->> 'code_postal', ''), coalesce(c ->> 'ville', ''),
-    coalesce(c ->> 'forme', 'micro'), coalesce(c ->> 'raison_sociale', ''), coalesce(c ->> 'siret', ''), coalesce(c ->> 'tva', ''),
-    coalesce(c ->> 'iban', ''), coalesce(c ->> 'bic', ''), coalesce(c ->> 'titulaire', ''), left(p_contrat, 20), now(), left(trim(p_signature), 120),
-    e like '%@demo.crmzx.re');
-  return true;
-end $$;
-revoke execute on function public.crm_apporteur_activer(jsonb, text, text) from public, anon;
-grant execute on function public.crm_apporteur_activer(jsonb, text, text) to authenticated;
+-- Plus d'inscription libre (2026-10-27) : c'est l'administrateur qui crée chaque apporteur (fonctions en fin de script).
+drop function if exists public.crm_apporteur_inscription(text, text, jsonb, text, text);
+drop function if exists public.crm_apporteur_activer(jsonb, text, text);
 
 -- Fiche de l'apporteur connecté (null s'il n'en est pas un).
 create or replace function public.crm_apporteur_moi() returns json
@@ -770,3 +752,196 @@ language sql security definer set search_path = public as $$
   where entreprise_id = p_entreprise and mois = to_char(now(), 'YYYY-MM');
 $$;
 revoke execute on function public.crm_plaque_reserver(uuid, integer), public.crm_plaque_rendre(uuid) from public, anon, authenticated;
+
+-- =====================================================================================================
+-- Comptes créés par l'administrateur (2026-10-27) : interface admin.html réservée au super-admin.
+-- Revendeurs : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente) et packs livraison posés par l'admin.
+-- Apporteurs : créés par l'admin avec le mot de passe de départ 12345678, ils signent leur contrat dans l'appli.
+-- =====================================================================================================
+
+-- Connexion par identifiant court (ex. « admin ») : l'appli demande l'email correspondant.
+create table if not exists public.crm_identifiants (
+  identifiant text primary key,
+  email text not null
+);
+alter table public.crm_identifiants enable row level security;
+create or replace function public.crm_identifiant(p_id text) returns text
+language sql stable security definer set search_path = public as $$
+  select email from public.crm_identifiants where identifiant = lower(trim(p_id));
+$$;
+grant execute on function public.crm_identifiant(text) to anon, authenticated;
+
+-- Compte administrateur : identifiant « admin », mot de passe de départ « admin » (posé une seule fois,
+-- relancer le script ne le remet pas). ⚠️ À changer avant le lancement (Paramètres > Compte).
+do $$
+declare neuf boolean;
+begin
+  perform public.crm__utilisateur('anthony.lamer@hotmail.fr', 'admin');
+  insert into public.crm_identifiants (identifiant, email) values ('admin', 'anthony.lamer@hotmail.fr')
+    on conflict (identifiant) do nothing returning true into neuf;
+  if neuf then
+    update auth.users set encrypted_password = extensions.crypt('admin', extensions.gen_salt('bf')), updated_at = now(),
+      email_confirmed_at = coalesce(email_confirmed_at, now())
+      where lower(email) = 'anthony.lamer@hotmail.fr';
+    update public.crm_membres set doit_changer_mdp = false where email = 'anthony.lamer@hotmail.fr';
+  end if;
+end $$;
+
+-- Super-admin : liste des revendeurs avec leurs réglages et leurs comptes (jamais leurs données).
+create or replace function public.crm_admin_revendeurs() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select json_agg(g order by g.demo, g.cree_le desc) from (
+    select en.id, en.nom, en.demo, en.cree_le, en.config,
+      exists (select 1 from public.crm_membres m join public.crm_superadmins s on s.email = m.email where m.entreprise_id = en.id) as admin,
+      (select coalesce(json_agg(json_build_object('email', mb.email, 'role', mb.role, 'doit_changer_mdp', mb.doit_changer_mdp) order by mb.ajoute_le), '[]'::json)
+         from public.crm_membres mb where mb.entreprise_id = en.id) as comptes
+    from public.crm_entreprises en) g), '[]'::json);
+end $$;
+
+-- Super-admin : crée un revendeur (entreprise + compte, mot de passe 12345678) ou enregistre ses réglages.
+-- Avec un id et un email nouveau : ajoute un compte de connexion à ce revendeur.
+create or replace function public.crm_admin_revendeur_enregistrer(p_id uuid, p_email text, p_config jsonb) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  eid uuid := p_id;
+  e text := lower(trim(coalesce(p_email, '')));
+  n text := left(trim(coalesce(p_config -> 'infos' ->> 'nom', '')), 120);
+  c jsonb := coalesce(p_config, '{}'::jsonb);
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if n = '' then raise exception 'Le nom de l''entreprise est obligatoire.'; end if;
+  if length(c::text) > 20000 then raise exception 'Réglages trop longs.'; end if;
+  if e <> '' and e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Email de connexion invalide.'; end if;
+  if e <> '' and exists (select 1 from public.crm_membres where email = e) then raise exception 'Cet email a déjà un compte revendeur.'; end if;
+  if eid is null then
+    if e = '' then raise exception 'L''email de connexion est obligatoire.'; end if;
+    insert into public.crm_entreprises (nom, config) values (n, c) returning id into eid;
+  else
+    update public.crm_entreprises set nom = n, config = c where id = eid;
+    if not found then raise exception 'Revendeur introuvable.'; end if;
+  end if;
+  if e <> '' then
+    perform public.crm__utilisateur(e, '12345678');
+    insert into public.crm_membres (email, entreprise_id, role, doit_changer_mdp) values (e, eid, 'admin', true);
+  end if;
+  return json_build_object('id', eid);
+end $$;
+
+-- Super-admin : retire un compte de connexion d'un revendeur.
+create or replace function public.crm_admin_compte_retirer(p_email text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if lower(trim(p_email)) = lower(auth.jwt() ->> 'email') then raise exception 'Tu ne peux pas retirer ton propre compte.'; end if;
+  delete from public.crm_membres where email = lower(trim(p_email));
+end $$;
+
+-- Apporteurs : mot de passe de départ à changer, contrat signé dans l'appli après la création par l'admin.
+alter table public.crm_apporteurs add column if not exists doit_changer_mdp boolean not null default false;
+
+create or replace function public.crm_admin_apporteur_enregistrer(p_email text, p_infos jsonb, p_nouveau boolean) returns json
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  e text := lower(trim(coalesce(p_email, '')));
+  c jsonb := public.crm__apporteur_champs(coalesce(p_infos, '{}'::jsonb));
+  existe boolean;
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if coalesce(c ->> 'nom', '') = '' or coalesce(c ->> 'prenom', '') = '' then raise exception 'Prénom et nom obligatoires.'; end if;
+  if coalesce(c ->> 'siret', '') <> '' and c ->> 'siret' !~ '^\d{14}$' then raise exception 'Le SIRET doit faire 14 chiffres.'; end if;
+  if p_nouveau then
+    if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or e like '%@demo.crmzx.re' then raise exception 'Email invalide.'; end if;
+    if exists (select 1 from public.crm_apporteurs where email = e) then raise exception 'Cet apporteur existe déjà.'; end if;
+    select exists (select 1 from auth.users where lower(email) = e) into existe;
+    perform public.crm__utilisateur(e, '12345678');
+    insert into public.crm_apporteurs (email, prenom, nom, telephone, adresse, code_postal, ville, forme, raison_sociale, siret, tva,
+      iban, bic, titulaire, doit_changer_mdp)
+    values (e, c ->> 'prenom', c ->> 'nom', coalesce(c ->> 'telephone', ''), coalesce(c ->> 'adresse', ''), coalesce(c ->> 'code_postal', ''),
+      coalesce(c ->> 'ville', ''), coalesce(c ->> 'forme', 'micro'), coalesce(c ->> 'raison_sociale', ''), coalesce(c ->> 'siret', ''),
+      coalesce(c ->> 'tva', ''), coalesce(c ->> 'iban', ''), coalesce(c ->> 'bic', ''), coalesce(c ->> 'titulaire', ''), not existe);
+  else
+    update public.crm_apporteurs set prenom = c ->> 'prenom', nom = c ->> 'nom', telephone = coalesce(c ->> 'telephone', ''),
+      adresse = coalesce(c ->> 'adresse', ''), code_postal = coalesce(c ->> 'code_postal', ''), ville = coalesce(c ->> 'ville', ''),
+      forme = coalesce(c ->> 'forme', forme), raison_sociale = coalesce(c ->> 'raison_sociale', ''), siret = coalesce(c ->> 'siret', ''),
+      tva = coalesce(c ->> 'tva', ''), iban = coalesce(c ->> 'iban', ''), bic = coalesce(c ->> 'bic', ''), titulaire = coalesce(c ->> 'titulaire', '')
+    where email = e;
+    if not found then raise exception 'Apporteur introuvable.'; end if;
+  end if;
+  return (select row_to_json(a) from public.crm_apporteurs a where email = e);
+end $$;
+
+-- Super-admin : liste complète des apporteurs (pour les modifier).
+create or replace function public.crm_apporteurs_liste() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé au super-admin'; end if;
+  return coalesce((select json_agg((to_jsonb(a) || jsonb_build_object(
+      'leads', (select count(*) from public.crm_leads l where l.apporteur_email = a.email),
+      'ventes', (select count(*) from public.crm_leads l where l.apporteur_email = a.email and l.statut = 'vendu'))) order by a.demo, a.cree_le desc)
+    from public.crm_apporteurs a), '[]'::json);
+end $$;
+
+-- L'apporteur ne modifie lui-même que son téléphone et son RIB (le reste passe par l'administrateur).
+create or replace function public.crm_apporteur_maj(p_infos jsonb) returns json
+language plpgsql security definer set search_path = public as $$
+declare e text := lower(auth.jwt() ->> 'email'); c jsonb := public.crm__apporteur_champs(coalesce(p_infos, '{}'::jsonb));
+begin
+  if not exists (select 1 from public.crm_apporteurs where email = e) then raise exception 'Compte apporteur introuvable'; end if;
+  update public.crm_apporteurs set telephone = coalesce(nullif(c ->> 'telephone', ''), telephone),
+    iban = coalesce(c ->> 'iban', iban), bic = coalesce(c ->> 'bic', bic), titulaire = coalesce(c ->> 'titulaire', titulaire)
+  where email = e;
+  return public.crm_apporteur_moi();
+end $$;
+
+-- L'apporteur signe son contrat en ligne (une seule fois).
+create or replace function public.crm_apporteur_signer(p_contrat text, p_signature text) returns json
+language plpgsql security definer set search_path = public as $$
+declare e text := lower(auth.jwt() ->> 'email');
+begin
+  if coalesce(trim(p_signature), '') = '' or coalesce(p_contrat, '') = '' then raise exception 'Signe le contrat en tapant ton prénom et ton nom.'; end if;
+  update public.crm_apporteurs set contrat_version = left(p_contrat, 20), contrat_signe_le = now(), signature = left(trim(p_signature), 120)
+    where email = e and contrat_signe_le is null;
+  return public.crm_apporteur_moi();
+end $$;
+create or replace function public.crm_apporteur_mdp_change() returns void
+language sql security definer set search_path = public as $$
+  update public.crm_apporteurs set doit_changer_mdp = false where email = lower(auth.jwt() ->> 'email');
+$$;
+
+-- Remet le mot de passe d'un compte à 12345678 (super-admin pour tous, admin de garage pour son équipe).
+create or replace function public.crm_reinit_mdp(p_email text) returns void
+language plpgsql security definer set search_path = public, auth, extensions as $$
+declare e text := lower(trim(p_email));
+begin
+  if not (public.crm_est_superadmin()
+          or (public.crm_role() = 'admin' and exists (select 1 from public.crm_membres where email = e and entreprise_id = public.crm_entreprise()))) then
+    raise exception 'Non autorisé';
+  end if;
+  update auth.users set encrypted_password = extensions.crypt('12345678', extensions.gen_salt('bf')), updated_at = now() where lower(email) = e;
+  update public.crm_membres set doit_changer_mdp = true where email = e;
+  update public.crm_apporteurs set doit_changer_mdp = true where email = e;
+end $$;
+
+-- Véhicules partenaires : ceux que les autres garages du réseau partagent (sans la commission des apporteurs).
+-- La démo voit aussi ses propres véhicules, pour avoir quelque chose à montrer.
+create or replace function public.crm_reseau_partenaires() returns json
+language plpgsql stable security definer set search_path = public as $$
+declare eid uuid := public.crm_entreprise(); d boolean;
+begin
+  if eid is null then raise exception 'Compte non rattaché à un garage'; end if;
+  select demo into d from public.crm_entreprises where id = eid;
+  return coalesce((select json_agg(json_build_object('entreprise_id', r.entreprise_id, 'garage', r.data -> 'garage',
+      'vehicules', (select coalesce(jsonb_agg(v - 'commission' - 'commissionTexte'), '[]'::jsonb) from jsonb_array_elements(coalesce(r.data -> 'vehicules', '[]'::jsonb)) v),
+      'maj_le', r.maj_le) order by r.maj_le desc)
+    from public.crm_reseau r join public.crm_entreprises e on e.id = r.entreprise_id
+    where r.actif and e.demo = d and (r.entreprise_id <> eid or d)), '[]'::json);
+end $$;
+
+revoke execute on function public.crm_admin_revendeurs(), public.crm_admin_revendeur_enregistrer(uuid, text, jsonb), public.crm_admin_compte_retirer(text),
+  public.crm_admin_apporteur_enregistrer(text, jsonb, boolean), public.crm_apporteurs_liste(), public.crm_apporteur_maj(jsonb),
+  public.crm_apporteur_signer(text, text), public.crm_apporteur_mdp_change(), public.crm_reinit_mdp(text), public.crm_reseau_partenaires() from public, anon;
+grant execute on function public.crm_admin_revendeurs(), public.crm_admin_revendeur_enregistrer(uuid, text, jsonb), public.crm_admin_compte_retirer(text),
+  public.crm_admin_apporteur_enregistrer(text, jsonb, boolean), public.crm_apporteurs_liste(), public.crm_apporteur_maj(jsonb),
+  public.crm_apporteur_signer(text, text), public.crm_apporteur_mdp_change(), public.crm_reinit_mdp(text), public.crm_reseau_partenaires() to authenticated;

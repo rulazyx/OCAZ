@@ -22,18 +22,37 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`),
   Aucun lien du site public ne mène ici : Anthony envoie lui-même l'adresse aux pros. La vraie protection reste la connexion.
 - L'appli s'ouvre directement sur la connexion unique, sans choix de profil ; l'espace (garage ou apporteur) dépend du compte.
 - Un compte qui est à la fois garage et apporteur passe d'un espace à l'autre avec le bouton ⇄ de l'en-tête.
-  Un garage ouvre son espace apporteur depuis Paramètres > Réseau Ocaz (`/apporteur?inscription`, contrat signé, même compte).
-- `/apporteur` sans connexion renvoie vers la connexion ; `/apporteur?inscription` ouvre l'inscription (lien donné par les garages).
+- `/apporteur` sans connexion renvoie vers la connexion (plus d'inscription en ligne : voir « Comptes et droits »).
 - Les liens de vitrine et le code d'intégration générés dans Paramètres pointent vers `https://ocaz.re/`.
 - `404.html` renvoie toute autre adresse vers ocaz.re.
 
+## Comptes et droits (administrateur)
+
+- Plus d'inscription libre : l'administrateur (super-admin) crée tous les comptes depuis `admin.html` (`/admin`), où il arrive
+  directement à la connexion. Identifiant court `admin` (table `crm_identifiants`), mot de passe de départ `admin` à changer avant le lancement.
+- Onglet **Commercial** : **Revendeurs** (infos légales, email de connexion, droits, packs livraison, comptes) et **Apporteurs** (fiche complète,
+  suspension, réinitialisation du mot de passe). Mot de passe de départ des comptes créés : `12345678`.
+- Droits d'un revendeur (`crm_entreprises.config`, lu par `droits.js`) : réseau Ocaz (+ commission), dépôt-vente, achat-revente.
+  Achat-revente seul : pas d'onglet Dépôt vente. Dépôt-vente seul : pas d'onglet Reprise, Stock limité aux véhicules partenaires.
+  Le Stock a toujours un sous-onglet **Partenaires** (véhicules partagés par les autres garages du réseau).
+- Paramètres du revendeur : logo modifiable, autres infos grisées (contacter l'administrateur), documents (télécharger, envoyer par mail, ajouter).
+- Paramètres de l'apporteur : téléphone et RIB seulement, contrat (signé à la première connexion), factures.
+
+## Reprises et dépôt-vente
+
+- **Reprise** : onglets En cours / Validées / Annulées. Création : Retour, Enregistrer pour plus tard, Valider. « Valider » range la reprise
+  dans les validées sans la passer en préparation ; elle se choisit ensuite dans une offre (menu déroulant), et c'est la commande qui la fait entrer en préparation.
+- **Dépôt vente** (onglet à part, `depotvente.js`) : En stock / Réservés / Vendus (+ À compléter). Nouveau dépôt en 4 étapes :
+  client, véhicule, prix et commission (validable dès cette étape), documents (CNI, carte grise, justificatif de domicile, RIB),
+  téléversés ou photographiés l'un après l'autre sur téléphone (`scan.js`, lecture automatique Tesseract chargée à la demande).
+
 ## Réseau Ocaz (apporteurs d'affaires et leads)
 
-- **Garage** : Paramètres > Réseau Ocaz (rejoindre, commission fixe ou en %, partage d'office ou véhicule par véhicule).
+- **Garage** : adhésion et commission réglées par l'administrateur (partage d'office, ou véhicule par véhicule).
   Chaque fiche véhicule a une case « Partager au réseau » et une commission propre si besoin. Onglet **Leads** : clients
   transmis par les apporteurs, prise en charge (fiche client, reprise à étudier, relance), vendu ou clos, commission versée,
   facture de l'apporteur. Le garage verse la commission lui-même : rien ne passe par Ocaz.
-- **Apporteur** (`apporteur.html`, gratuit, inscription sur `/apporteur?inscription`) : inscription avec statut d'apporteur d'affaires et contrat signé en ligne,
+- **Apporteur** (`apporteur.html`, gratuit, compte créé par l'administrateur) : contrat signé en ligne à la première connexion,
   Suivi leads (en cours, clos, terminés), Données (commissions, ventes, leads en souffrance, taux de transformation),
   Réseau (choisir un véhicule et envoyer un client, avec son accord RGPD et une reprise éventuelle), Paramètres (infos, RIB,
   factures de commission, contrat). Démo : identifiant `apporteur`, mot de passe `test`.

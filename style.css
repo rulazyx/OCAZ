@@ -626,3 +626,41 @@ body[data-onglet="leads"] .toolbar, body[data-onglet="leads"] #filters, body[dat
 .o-nouveau-client .inline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 .o-nouveau-client button { display: inline-flex; align-items: center; gap: 6px; }
 #bottom-tabs button .ico { width: 40px; padding: 4px 9px; }
+
+/* Paramètres du revendeur : infos du garage en lecture seule. */
+.p-verrouille input:disabled { opacity: 1; color: var(--muted); background: color-mix(in srgb, var(--line) 35%, var(--card)); cursor: not-allowed; }
+.sub.alerte { color: var(--orange); }
+
+/* Dépôt vente : étapes du nouveau dépôt. */
+.etapes { list-style: none; margin: 0; padding: 10px 20px 4px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.etapes button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 10px;
+  border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.etapes button:disabled { cursor: default; opacity: .55; }
+.etapes b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 99px; background: var(--line); color: var(--text); font-size: 12px; flex: none; }
+.etapes span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etapes li.fait b { background: var(--green); color: #fff; }
+.etapes li.actif button { border-color: var(--primary); color: var(--text); font-weight: 600; }
+.etapes li.actif b { background: var(--primary); color: var(--on-primary); }
+@media (max-width: 560px) { .etapes span { display: none; } .etapes li.actif span { display: inline; } .etapes { grid-template-columns: auto auto auto auto; justify-content: start; } }
+.d-photo { width: 100%; justify-content: center; padding: 14px; font-size: 16px; margin-top: 4px; }
+.d-docs { display: grid; gap: 8px; }
+.d-doc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.d-doc.ok { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.d-doc.ok strong { color: var(--green); }
+.d-doc-tete { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.d-lu { border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--green) 8%, transparent); font-size: 14px; }
+.d-lu ul { margin: 6px 0; padding-left: 18px; }
+
+/* Photos des documents, l'un après l'autre. */
+.scan-doc { display: grid; gap: 8px; }
+.scan-doc h3 { margin: 4px 0 0; font-size: 20px; }
+.scan-suite { list-style: none; padding: 0; margin: 6px 0 0; display: flex; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.scan-suite li { padding: 3px 10px; border-radius: 99px; background: var(--line); color: var(--muted); }
+.scan-suite li.actif { background: var(--primary); color: var(--on-primary); }
+.scan-suite li.fait { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.scan-apercu { border: 2px dashed var(--line); border-radius: 14px; min-height: 220px; display: grid; place-items: center; overflow: hidden; color: var(--muted); }
+.scan-apercu img { width: 100%; max-height: 52dvh; object-fit: contain; }
+
+/* Stock > Partenaires. */
+.card.partenaire .thumb img { max-height: 130px; width: 100%; object-fit: cover; }
+p.alerte { color: var(--orange); }

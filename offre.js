@@ -49,7 +49,8 @@ const Offre = (() => {
   let etat = null; // offre en cours d'édition
 
   const stock = () => db.all('vehicules').filter(v => DISPONIBLE.includes(v.statut) || v.id === etat?.vehiculeId);
-  const reprisesDispo = () => db.all('vehicules').filter(v => REPRISE.includes(v.statut) || v.id === etat?.repriseId);
+  // Seules les reprises validées se choisissent dans une offre (menu déroulant).
+  const reprisesDispo = () => db.all('vehicules').filter(v => v.statut === 'Reprise validée' || v.id === etat?.repriseId);
   const libelleV = v => vehiculeNom(v) + (v.immatriculation ? ' — ' + v.immatriculation : '');
 
   function calcul() {
@@ -77,13 +78,26 @@ const Offre = (() => {
     </section>`;
   }
 
+  function menuReprise() {
+    const liste = reprisesDispo();
+    const rep = db.get('vehicules', etat.repriseId);
+    return `<section class="o-bloc">
+      <h3 class="section">Véhicule repris <span class="hint">(facultatif)</span></h3>
+      <select data-reprise-menu aria-label="Véhicule repris"><option value="">${liste.length ? 'Aucune reprise' : 'Aucune reprise validée pour le moment'}</option>
+        ${liste.map(v => `<option value="${v.id}"${v.id === etat.repriseId ? ' selected' : ''}>${esc(libelleV(v))} · ${euros(v.prixAchat || v.prixPropose) || 'prix à saisir'}</option>`).join('')}</select>
+      ${rep?.image ? `<div class="o-choix"><img src="${esc(rep.image)}" alt="" onerror="this.remove()"><div><strong>${esc(vehiculeNom(rep))}</strong>
+        <span class="sub">${esc([rep.annee, km(rep.kilometrage), rep.carburant].filter(Boolean).join(' · '))}</span></div></div>` : ''}
+      <span class="hint">Les reprises se valident dans l'onglet Reprise.</span>
+    </section>`;
+  }
+
   function rendre() {
     const c = calcul();
     const r = etat.pack;
     const ligne = (l, m, cls = '') => `<div class="o-ligne ${cls}"><span>${l}</span><strong>${m}</strong></div>`;
     $('#offre-body').innerHTML = `
       ${selecteur('vehiculeId', 'Véhicule souhaité', stock(), etat.vehiculeId, libelleV, 'Aucun véhicule disponible en stock.')}
-      ${selecteur('repriseId', 'Véhicule repris', reprisesDispo(), etat.repriseId, libelleV, 'Aucune reprise en cours.', true)}
+      ${Droits.achat() ? menuReprise() : ''}
       ${selecteur('clientId', 'Client', db.all('clients').slice().sort((a, b) => norm(clientNom(a)).localeCompare(norm(clientNom(b)))), etat.clientId, clientNom, 'Aucun client pour l\'instant : crée-le ci-dessous.')}
       ${etat.clientId ? '' : `<section class="o-bloc o-nouveau-client">
         <h3 class="section">Nouveau client</h3>
@@ -266,6 +280,12 @@ const Offre = (() => {
       }
     });
     body.addEventListener('change', e => {
+      if (e.target.matches('[data-reprise-menu]')) {
+        etat.repriseId = e.target.value;
+        if (etat.repriseId && !etat.clientId) etat.clientId = db.get('vehicules', etat.repriseId)?.vendeurId || '';
+        rendre();
+        return;
+      }
       const i = e.target.dataset.packItem;
       if (i != null) { etat.pack.items[i].coche = e.target.checked; rendre(); return; }
       const k = e.target.dataset.pack;
