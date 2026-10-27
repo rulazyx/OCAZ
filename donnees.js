@@ -161,6 +161,7 @@ const Donnees = (() => {
       </div>
       ${EnLigne.panneau()}
       ${Reseau.panneau()}
+      ${Revision.panneau()}
       <section class="panneau">
         <div class="p-tete"><h3>CA et bénéfice, 6 derniers mois</h3>
           <div class="legende"><span><i class="s1"></i>CA</span><span><i class="s2"></i>Bénéfice</span></div></div>

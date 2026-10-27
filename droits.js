@@ -18,7 +18,7 @@ const Droits = (() => {
     return {
       reprises: achat(),
       depot: depot(),
-      leads: reseau(),
+      leads: true, // réseau et/ou révisions
     };
   }
   const visible = nom => onglets()[nom] !== false;

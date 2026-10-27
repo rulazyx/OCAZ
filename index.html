@@ -91,6 +91,11 @@
       <label class="button primary">+ Ajouter un document<input id="doc-input" type="file" accept="application/pdf,image/*" hidden></label></div>
     <span class="hint" id="doc-info"></span>
   </section>
+  <section class="panneau">
+    <h2>Révisions</h2>
+    <p class="muted">11 mois après une vente, le client reçoit un rappel par mail et tu as un lead pour lui proposer sa révision, à ton tarif prépa plus ta marge.</p>
+    <div id="p-revision" class="stack"></div>
+  </section>
   </div>
   <div class="p-col">
   <section class="panneau">
@@ -182,6 +187,16 @@
     <div class="actions"><span class="spacer"></span>
       <button type="button" id="lead-annuler">Annuler</button>
       <button type="button" id="lead-ok" class="primary">OK</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-revision">
+  <div>
+    <h2 id="rev-titre">Révision</h2>
+    <div id="rev-body"></div>
+    <div class="actions"><span class="spacer"></span>
+      <button type="button" id="rev-annuler">Annuler</button>
+      <button type="button" id="rev-ok" class="primary">OK</button></div>
   </div>
 </dialog>
 
@@ -345,6 +360,7 @@
 <script src="enligne.js"></script>
 <script src="commission.js"></script>
 <script src="reseau.js"></script>
+<script src="revision.js"></script>
 <script src="import.js"></script>
 <script src="donnees.js"></script>
 <script src="demo.js"></script>
