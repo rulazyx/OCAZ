@@ -9,7 +9,8 @@ const EnLigne = (() => {
 
   const reglages = () => Param.get().vitrine;
   const slugDe = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  const dossier = () => location.origin + location.pathname.replace(/[^/]*$/, '');
+  // Les vitrines sont publiques sur le site ocaz.re ; l'appli pro est à part (pro.ocaz.re).
+  const dossier = () => 'https://ocaz.re/';
   const lien = slug => dossier() + 'vitrine?g=' + encodeURIComponent(slug);
   const codeIntegre = slug => `<script src="${dossier()}integrer.js" data-garage="${slug}" async></script>`;
 

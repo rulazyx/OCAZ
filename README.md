@@ -14,16 +14,18 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
 - Sauvegarde : export / import d'un fichier `.json` (menu ⋯).
 
-## Une seule appli, trois profils
+## Ocaz Pro (pro.ocaz.re)
 
-`ocaz.re` s'ouvre sur un accueil : « Particulier, je cherche une voiture » au centre, et un bouton « VERSION PRO » en haut à gauche qui ouvre la connexion unique (`./#pro` l'ouvre directement).
-Couleurs : noirs et gris foncés avec le jaune de l'écran de chargement (jaune = couleur d'action en mode sombre) ; le bleu ne reste que dans les graphiques.
-- **Particulier** : les véhicules du réseau (`/reseau`), sans compte.
-- **Revendeur** et **Apporteur** : le même écran de connexion (Version pro), sans choix de profil ; l'appli ouvre l'espace qui correspond
-  aux identifiants (garage ou apporteur). Déjà connecté : l'accueil est sauté.
+Ce dépôt est l'appli des pros, à l'adresse `pro.ocaz.re`. Le site public (véhicules du réseau, vitrines des garages, `integrer.js`,
+pages légales, `rejoindre`, `outils`) est dans le dépôt `CRM-ZX`, à l'adresse `ocaz.re`.
+- L'appli n'est pas référencée : `robots.txt` interdit tout, et chaque page a `<meta name="robots" content="noindex">`.
+  Aucun lien du site public ne mène ici : Anthony envoie lui-même l'adresse aux pros. La vraie protection reste la connexion.
+- L'appli s'ouvre directement sur la connexion unique, sans choix de profil ; l'espace (garage ou apporteur) dépend du compte.
 - Un compte qui est à la fois garage et apporteur passe d'un espace à l'autre avec le bouton ⇄ de l'en-tête.
   Un garage ouvre son espace apporteur depuis Paramètres > Réseau Ocaz (`/apporteur?inscription`, contrat signé, même compte).
-- `/apporteur` reste valable : sans connexion, il renvoie vers la connexion unique ; `/apporteur?inscription` ouvre l'inscription.
+- `/apporteur` sans connexion renvoie vers la connexion ; `/apporteur?inscription` ouvre l'inscription (lien donné par les garages).
+- Les liens de vitrine et le code d'intégration générés dans Paramètres pointent vers `https://ocaz.re/`.
+- `404.html` renvoie toute autre adresse vers ocaz.re.
 
 ## Réseau Ocaz (apporteurs d'affaires et leads)
 
@@ -44,22 +46,13 @@ dans `app.js` pour pouvoir brancher une base en ligne (Supabase) et synchroniser
 
 Pour l'essayer en local : ouvrir `index.html` dans un navigateur.
 
-## Adresse ocaz.re
+## Adresse pro.ocaz.re
 
-Le fichier `CNAME` (contenu : `ocaz.re`) relie l'appli au domaine. Il ne doit arriver sur `main` qu'une fois les DNS en place,
-sinon GitHub Pages redirige vers une adresse qui ne répond pas encore.
-
-Chez le registrar, zone DNS de `ocaz.re` :
-- 4 enregistrements `A` sur `@` : 185.199.108.153, 185.199.109.153, 185.199.110.153, 185.199.111.153
-- (facultatif) 4 `AAAA` sur `@` : 2606:50c0:8000::153, 2606:50c0:8001::153, 2606:50c0:8002::153, 2606:50c0:8003::153
-- 1 `CNAME` sur `www` vers `rulazyx.github.io.`
-- supprimer les anciens `A`/`AAAA`/`CNAME` posés par défaut par le registrar (page de parking)
-
-Ensuite : GitHub > Settings > Pages > Custom domain = `ocaz.re`, puis cocher Enforce HTTPS quand le certificat est prêt.
-Les anciennes adresses `rulazyx.github.io/CRM-ZX/...` sont redirigées automatiquement (`/CRM-ZX/vitrine.html` → `ocaz.re/vitrine.html`),
-y compris les codes d'intégration `integrer.js` déjà collés sur des sites de garages.
-Dans Supabase > Authentication > URL Configuration : Site URL = `https://ocaz.re`, ajouter `https://ocaz.re/**` aux Redirect URLs.
-Les données gardées dans le navigateur dépendent de l'adresse : sur ocaz.re il faut se reconnecter, la synchronisation recharge le compte.
+Le fichier `CNAME` (contenu : `pro.ocaz.re`) relie ce dépôt au sous-domaine.
+- OVH, zone DNS de `ocaz.re` : 1 `CNAME` sur `pro` vers `rulazyx.github.io.`
+- GitHub > Settings > Pages : Source = Deploy from a branch, `main`, `/ (root)` ; Custom domain = `pro.ocaz.re` ; Enforce HTTPS.
+- Supabase > Authentication > URL Configuration : ajouter `https://pro.ocaz.re/**` aux Redirect URLs.
+Les données gardées dans le navigateur dépendent de l'adresse : sur pro.ocaz.re il faut se reconnecter une fois.
 
 ## Synchronisation PC / téléphone (Supabase)
 
@@ -71,10 +64,3 @@ Les données gardées dans le navigateur dépendent de l'adresse : sur ocaz.re i
 
 Toutes les données d'un compte sont dans une ligne JSON de la table `crm_data`, protégée par une règle d'accès (RLS).
 La modification la plus récente l'emporte.
-
-## Pages d'information et référencement
-
-- `rejoindre` : pourquoi rejoindre le réseau (garages, apporteurs). Lien en bas du site du réseau (« Vous voulez faire partie du réseau ? »).
-- `mentions-legales`, `confidentialite`, `cgu` : textes légaux. Les mentions surlignées `[…]` (nom, SIREN, adresse, téléphone, région Supabase, ville du tribunal) sont à compléter dans le générateur ou directement dans les fichiers. À faire relire par un professionnel avant le lancement.
-- Pied de page commun (liens légaux) sur l'accueil, le site du réseau, les vitrines, les outils et ces pages (styles dans `marque.css`, pages dans `pages.css`).
-- Référencement : `robots.txt`, `sitemap.xml`, titres, descriptions, adresses canoniques et aperçus de partage (Open Graph). Déclarer `https://ocaz.re/sitemap.xml` dans Google Search Console.

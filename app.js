@@ -995,23 +995,13 @@ function chargement(oui) {
   setTimeout(() => s.classList.add('fin'), reste);
 }
 
-// « Version pro » : un seul écran de connexion pour les revendeurs et les apporteurs, l'espace s'ouvre selon le compte.
-// ?espace=… (anciens liens) ou #pro dans l'adresse ouvre directement la connexion.
+// Un seul écran de connexion pour les revendeurs et les apporteurs, l'espace s'ouvre selon le compte.
+// ?espace=… (anciens liens) choisit l'espace préféré d'un compte qui a les deux.
 const espaceLien = new URLSearchParams(location.search).get('espace');
-let connexionPro = !!espaceLien || location.hash === '#pro';
 if (['revendeur', 'apporteur'].includes(espaceLien)) Sync.preferer(espaceLien === 'apporteur' ? 'apporteur' : 'garage');
-function versionPro(oui) {
-  connexionPro = oui;
-  afficherAuth(Sync.status, Sync.user, Sync.role);
-  if (oui) setTimeout(() => $('#auth-email').focus(), 50);
-}
-$('.accueil-particulier .accueil-ico').innerHTML = icon('vehicules', 30);
-$('#accueil-pro').addEventListener('click', () => versionPro(true));
-$('#auth-retour').addEventListener('click', () => { erreurAuth(''); versionPro(false); });
 $('#btn-espace').addEventListener('click', () => Sync.preferer('apporteur'));
 
 // Écran de connexion : l'appli s'ouvre dessus tant qu'on n'est pas connecté.
-// Sans compte connecté, on commence par l'accueil (Je cherche une voiture / Version pro).
 function afficherAuth(status, user, role) {
   const gate = $('#auth');
   const config = Sync.configure();
@@ -1022,11 +1012,6 @@ function afficherAuth(status, user, role) {
   document.body.classList.toggle('verrouille', bloque);
   $('#btn-espace').hidden = !role || !Sync.apporteur;
   if (!bloque) return;
-  const accueil = !user && config && !connexionPro;
-  $('#accueil').hidden = !accueil;
-  $('#auth-form').hidden = accueil;
-  if (accueil) return;
-  $('#auth-retour').hidden = !!user || !config;
   $('#auth-espace').hidden = !!user;
   $('#auth-espace').textContent = 'Version pro';
   const refuse = status === 'refuse';

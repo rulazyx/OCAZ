@@ -3,14 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Ocaz | Voitures d'occasion des pros à La Réunion</title>
-<meta name="description" content="Ocaz, le réseau des garages et marchands VO de La Réunion : trouvez une voiture d'occasion chez un pro de l'île, ou gérez votre garage avec l'appli Ocaz.">
-<link rel="canonical" href="https://ocaz.re/">
-<meta property="og:title" content="Ocaz | Roulez local, achetez pro">
-<meta property="og:description" content="Les voitures d'occasion des garages professionnels de La Réunion.">
-<meta property="og:url" content="https://ocaz.re/">
-<meta property="og:type" content="website">
-<meta property="og:image" content="https://ocaz.re/icon-512.png">
+<title>Ocaz Pro</title>
+<!-- Appli réservée aux pros : jamais référencée (voir aussi robots.txt). -->
+<meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="theme-color" content="#0d0f12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OCAZ">
@@ -27,18 +22,7 @@
   <div class="splash-route"><span></span></div>
 </div>
 <div id="auth" hidden>
-  <!-- Accueil d'ocaz.re : les particuliers vont aux véhicules ; les pros passent par « Version pro » (une seule connexion,
-       l'appli reconnaît au compte s'il s'agit d'un revendeur ou d'un apporteur d'affaires). -->
-  <section id="accueil" class="accueil">
-    <button type="button" class="accueil-pro" id="accueil-pro">VERSION PRO</button>
-    <img src="logo.svg" alt="" width="72" height="72">
-    <h1><span class="brand-name">OCAZ</span></h1>
-    <p class="accueil-slogan">Roulez local, achetez pro</p>
-    <a class="accueil-particulier" href="reseau">
-      <span class="accueil-ico" data-ico="vehicules"></span><b>Particulier</b><small>Je cherche une voiture</small></a>
-  </section>
-  <form id="auth-form" class="auth-carte" novalidate hidden>
-    <button type="button" id="auth-retour" class="lien auth-retour">← Retour</button>
+  <form id="auth-form" class="auth-carte" novalidate>
     <img src="logo.svg" alt="" width="72" height="72">
     <h1><span class="brand-name">OCAZ</span> <span id="auth-espace" class="ap-marque" hidden></span></h1>
     <p id="auth-texte" class="muted">Connecte-toi pour accéder à Ocaz.</p>
@@ -222,7 +206,7 @@
     <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-sa-creer" class="primary">Créer le compte</button></div>
     <div id="sa-liste" class="sa-liste"></div>
     <h3 class="section">Apporteurs du réseau</h3>
-    <p class="hint">Ils s'inscrivent seuls (gratuit) depuis la page ocaz.re/apporteur, avec leur statut et le contrat signé en ligne. Tu peux suspendre un compte.</p>
+    <p class="hint">Ils s'inscrivent seuls (gratuit) depuis le lien d'inscription ci-dessus, avec leur statut et le contrat signé en ligne. Tu peux suspendre un compte.</p>
     <div id="sa-apporteurs" class="sa-liste"></div>
   </section>
   <section class="panneau" id="equipe" hidden>

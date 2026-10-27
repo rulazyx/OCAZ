@@ -1,4 +1,3 @@
+# Appli Ocaz Pro : réservée aux garages et apporteurs, rien à référencer.
 User-agent: *
-Allow: /
-
-Sitemap: https://ocaz.re/sitemap.xml
+Disallow: /

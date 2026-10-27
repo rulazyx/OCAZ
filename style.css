@@ -395,26 +395,8 @@ body.verrouille { overflow: hidden; }
 .auth-carte p { margin: 0; text-align: center; }
 .auth-liens { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 button.lien { background: none; border: 0; padding: 4px 0; color: var(--primary); font-weight: 600; font-size: 14px; }
-.auth-retour { justify-self: start; margin: -8px 0 -14px; }
 .ap-marque { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: var(--accent); color: #0d0f12; padding: 2px 8px; border-radius: 99px; }
-/* Accueil d'ocaz.re : Particulier au centre, « Espace pro » en dessous (puis Revendeur / Apporteur d'affaires) */
-.accueil { width: min(440px, 100%); display: grid; gap: 12px; justify-items: center; text-align: center; color: #fff; }
-.accueil[hidden], #auth-form[hidden] { display: none; }
-.accueil img { border-radius: 18px; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); }
-.accueil h1 { margin: 0; font-size: 28px; }
-.accueil-slogan { margin: -6px 0 10px; color: #c9cbd0; font-size: 16px; }
-.accueil-particulier { width: 100%; box-sizing: border-box; display: grid; gap: 4px; justify-items: center; padding: 22px 18px; border-radius: 20px;
-  background: var(--accent); color: #111; text-decoration: none; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); transition: transform .15s; }
-.accueil-particulier:hover, .accueil-particulier:focus-visible { transform: translateY(-3px); outline: none; }
-.accueil-particulier .accueil-ico { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: rgba(0, 0, 0, .1); margin-bottom: 4px; }
-.accueil-particulier b { font-size: 20px; }
-.accueil-particulier small { font-size: 15px; color: #3b2a05; }
-/* « VERSION PRO » en haut à gauche : connexion unique des revendeurs et apporteurs */
-.accueil-pro { all: unset; box-sizing: border-box; cursor: pointer; position: fixed; z-index: 1;
-  top: calc(16px + env(safe-area-inset-top)); left: calc(16px + env(safe-area-inset-left));
-  padding: 9px 16px; border-radius: 99px; font-weight: 700; font-size: 13px; letter-spacing: .12em; color: #fff;
-  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .22); transition: background .15s, border-color .15s; }
-.accueil-pro:hover, .accueil-pro:focus-visible { background: rgba(255, 255, 255, .13); border-color: var(--accent); }
+#auth-form[hidden] { display: none; }
 /* Bascule entre l'espace garage et l'espace apporteur (compte qui a les deux) */
 .espace-bascule { flex: none; padding: 6px 12px; border-radius: 99px; border: 1px solid rgba(255, 255, 255, .3); color: #fff; text-decoration: none;
   font-size: 13px; font-weight: 600; white-space: nowrap; }
