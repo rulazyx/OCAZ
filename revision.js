@@ -1,9 +1,9 @@
-// Rappels de révision : 11 mois après une vente livrée, le client reçoit un mail (fonction Supabase « revision »,
-// lancée chaque jour par la base) et le garage voit un lead « Révision » à rappeler dans l'onglet Leads.
+// Rappels de révision : 11 mois après une vente livrée, le garage voit un lead « Révision » dans l'onglet Leads,
+// pour rappeler le client et lui proposer sa révision (aucun mail n'est envoyé au client).
 // Le prix proposé = coût de la révision (ligne vidange de la préparation du véhicule, sinon coût réglé dans Paramètres)
 // + la marge du garage. Le suivi du lead (RDV, faite, close) est gardé sur la commande (champ revision).
 const Revision = (() => {
-  const DEFAUTS = { actif: true, mail: true, delaiMois: 11, cout: '', margeType: 'pourcentage', margeValeur: 30, prixDansMail: true };
+  const DEFAUTS = { actif: true, delaiMois: 11, cout: '', margeType: 'pourcentage', margeValeur: 30 };
   const VUES = { 'À appeler': 'a_appeler', 'À venir': 'a_venir', RDV: 'rdv', Faites: 'faite', Closes: 'clos' };
   const STATUTS = { a_appeler: ['À appeler', 'b-orange'], a_venir: ['À venir', 'b-grey'], rdv: ['RDV pris', 'b-blue'], faite: ['Faite', 'b-green'], clos: ['Close', 'b-grey'] };
   const MOTIFS = ['Pas intéressé', 'Client injoignable', 'Révision faite ailleurs', 'Véhicule revendu', 'Autre'];
@@ -12,9 +12,6 @@ const Revision = (() => {
   const A_VENIR_JOURS = 30;
   let vue = 'À appeler';
   let vueLeads = null; // 'revisions' | 'reseau'
-  let envois = new Map(); // commande_id → { envoye_le, statut, stop_le }
-  let stops = new Set();
-  let chargeLe = 0;
   let enCours = null; // { id, mode } dans la fenêtre RDV / Faite / Clore
 
   const reglages = () => ({ ...DEFAUTS, ...(Param.get().revision || {}) });
@@ -60,33 +57,6 @@ const Revision = (() => {
   }
   const aAppeler = () => leads().filter(x => x.s === 'a_appeler');
 
-  // ---------- Mails envoyés (lus dans la base) ----------
-  async function charger(forcer) {
-    if (!Sync.role || !Sync.client || (!forcer && Date.now() - chargeLe < 60000)) return;
-    chargeLe = Date.now();
-    const [a, b] = await Promise.all([
-      Sync.client.from('crm_revision_envois').select('commande_id, envoye_le, statut, stop_le'),
-      Sync.client.from('crm_revision_stop').select('email'),
-    ]);
-    if (a.error) return; // tables pas encore installées : relancer supabase.sql
-    envois = new Map((a.data || []).map(x => [x.commande_id, x]));
-    stops = new Set((b.data || []).map(x => x.email));
-    if (['leads', 'donnees'].includes(onglet)) render();
-  }
-  function etatMail(x) {
-    const r = reglages();
-    const env = envois.get(x.o.id);
-    const email = String(x.c?.email || '').trim().toLowerCase();
-    if (env?.stop_le || (email && stops.has(email))) return '<span class="neg">✉ Le client a refusé les rappels par mail</span>';
-    if (env) return `✉ Mail de rappel envoyé le ${dateFr(env.envoye_le)}`;
-    if (!r.mail) return '✉ Mail automatique désactivé (Paramètres)';
-    if (!email) return '✉ Pas d\'email sur la fiche : rappel par téléphone seulement';
-    if (x.c?.pasDeRappel) return '✉ Le client ne veut pas de rappel par mail';
-    if (Sync.entreprise?.demo) return '✉ Démo : aucun mail n\'est envoyé';
-    if (x.s === 'a_venir') return `✉ Mail prévu le ${dateFr(x.e)}`;
-    return x.e >= isoLocal(ajouterJours(new Date(), -30)) ? '✉ Mail en attente d\'envoi (fait chaque matin)' : '✉ Vente trop ancienne pour le mail automatique';
-  }
-
   // ---------- Onglet Leads ----------
   // Bascule Révisions / Réseau en haut de l'onglet (le réseau seulement si le garage y a droit).
   function vueActive() {
@@ -102,7 +72,6 @@ const Revision = (() => {
       <button type="button" data-leads-vue="revisions" class="${vueActive() === 'revisions' ? 'active' : ''}">Révisions${n ? ' (' + n + ')' : ''}</button></div>`;
   }
   function rendreOnglet() {
-    charger();
     if (vueActive() === 'reseau') Reseau.rendreLeads(); else rendre();
   }
 
@@ -127,7 +96,6 @@ const Revision = (() => {
       ${x.s === 'faite' ? `<div class="sub ok">✓ Faite le ${dateFr(rv.faiteLe)} · facturée ${euros(rv.montant) || '—'}${rv.cout ? ' · bénéfice ' + euros(num(rv.montant) - num(rv.cout)) : ''}</div>` : ''}
       ${x.s === 'clos' && rv.motif ? `<div class="sub">Motif : ${esc(rv.motif)}</div>` : ''}
       ${rv.note ? `<div class="sub">« ${esc(rv.note)} »</div>` : ''}
-      <div class="sub hint">${etatMail(x)}</div>
       <div class="chips lead-actions">
         ${c?.telephone && ['a_appeler', 'a_venir', 'rdv'].includes(x.s) ? `<a class="chip" href="tel:${esc(c.telephone)}">Appeler</a>` : ''}
         ${wa && ouvert ? `<a class="chip" href="${esc(wa)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
@@ -151,7 +119,7 @@ const Revision = (() => {
       ${bascule()}
       ${actif() ? '' : `<div class="panneau lead-info"><strong>Rappels de révision désactivés</strong><p class="hint">Réactive-les dans Paramètres &gt; Révisions pour rappeler tes clients 11 mois après leur achat.</p>
         <button type="button" class="chip active" data-aller="parametres">Paramètres</button></div>`}
-      <p class="hint">${esc(reglages().delaiMois)} mois après chaque vente livrée, le client reçoit un mail de rappel et tu le rappelles pour lui proposer sa révision : ça rapporte et ça le fidélise.</p>
+      <p class="hint">${esc(reglages().delaiMois)} mois après chaque vente livrée, rappelle le client pour lui proposer sa révision : ça rapporte et ça le fidélise.</p>
       <div class="chips lead-vues">${Object.keys(VUES).map(k => `<button type="button" class="chip${k === vue ? ' active' : ''}" data-rev-vue="${k}">${k}${n[k] ? ' · ' + n[k] : ''}</button>`).join('')}</div>
       ${faites.length ? `<p class="hint">12 derniers mois : ${faites.length} révision(s) faite(s) · <b>${euros(ca)}</b> facturé(s)${benef ? ' · bénéfice ' + euros(benef) : ''}</p>` : ''}
       ${lot.length ? `<div class="list">${lot.map(carte).join('')}</div>` : `<div class="empty">${ILLUS.clients}<strong>${vue === 'À appeler' ? 'Aucune révision à proposer' : 'Rien ici'}</strong>
@@ -222,7 +190,6 @@ const Revision = (() => {
   // Panneau de l'accueil (onglet Données).
   function panneau() {
     if (!actif()) return '';
-    charger();
     const tous = leads();
     const a = tous.filter(x => x.s === 'a_appeler');
     const rdv = tous.filter(x => x.s === 'rdv');
@@ -243,8 +210,6 @@ const Revision = (() => {
     const ex = prix(null);
     $('#p-revision').innerHTML = `
       <label class="check"><input type="checkbox" data-rev-param="actif"${r.actif ? ' checked' : ''}><span>Créer un lead « Révision » après chaque vente</span></label>
-      <label class="check"><input type="checkbox" data-rev-param="mail"${r.mail ? ' checked' : ''}><span>Envoyer aussi un mail de rappel automatique au client</span></label>
-      <label class="check"><input type="checkbox" data-rev-param="prixDansMail"${r.prixDansMail ? ' checked' : ''}><span>Indiquer le prix dans le mail</span></label>
       <div class="grid">
         <div class="field"><label for="rev-p-delai">Délai après la vente (mois)</label><input id="rev-p-delai" data-rev-param="delaiMois" type="number" inputmode="numeric" min="1" max="36" value="${esc(r.delaiMois)}"></div>
         <div class="field"><label for="rev-p-cout">Coût d'une révision pour toi (€)</label><input id="rev-p-cout" data-rev-param="cout" type="number" inputmode="decimal" value="${esc(r.cout)}" placeholder="ex. 120"></div>
@@ -253,9 +218,7 @@ const Revision = (() => {
         <div class="field"><label for="rev-p-marge">Marge (${r.margeType === 'fixe' ? '€' : '%'})</label><input id="rev-p-marge" data-rev-param="margeValeur" type="number" inputmode="decimal" value="${esc(r.margeValeur)}"></div>
       </div>
       <p class="hint">Le coût pris en compte est celui de la ligne « Vidange et filtres » de la préparation du véhicule vendu (ton tarif prépa) ; sinon, le coût ci-dessus.
-        ${ex.prix ? `Exemple : ${euros(ex.cout)} + marge ${euros(ex.marge)} = <b>${euros(ex.prix)}</b> proposé au client.` : ''}</p>
-      <p class="hint">Le mail part le matin, au nom du garage ; la réponse du client arrive sur l'email du garage. Il contient un lien pour ne plus recevoir de rappel.
-        Pour un client qui n'en veut pas, coche « Pas de rappel d'entretien par mail » sur sa fiche.</p>`;
+        ${ex.prix ? `Exemple : ${euros(ex.cout)} + marge ${euros(ex.marge)} = <b>${euros(ex.prix)}</b> proposé au client.` : ''}</p>`;
   }
   function majParam(e) {
     const k = e.target.dataset.revParam;
@@ -277,5 +240,5 @@ const Revision = (() => {
     });
   }
 
-  return { init, rendre, rendreOnglet, bascule, clic, panneau, rendreParam, aAppeler, prix, charger };
+  return { init, rendre, rendreOnglet, bascule, clic, panneau, rendreParam, aAppeler, prix };
 })();

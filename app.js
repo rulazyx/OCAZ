@@ -185,7 +185,6 @@ const TABS = {
       { k: 'nom', l: 'Nom', required: true },
       { k: 'telephone', l: 'Téléphone', type: 'tel' },
       { k: 'email', l: 'Email', type: 'email' },
-      { k: 'pasDeRappel', l: "Pas de rappel d'entretien par mail", type: 'check', full: true },
       { k: 'adresse', l: 'Adresse', full: true },
       { k: 'codePostal', l: 'Code postal' },
       { k: 'ville', l: 'Ville' },
