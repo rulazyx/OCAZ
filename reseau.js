@@ -86,7 +86,8 @@ const Reseau = (() => {
 
   const nouveaux = () => leads.filter(x => x.lead.statut === 'nouveau');
   function majPastille() {
-    const n = nouveaux().length;
+    // Pastille de l'onglet Leads : nouveaux leads du réseau + révisions à proposer.
+    const n = nouveaux().length + Revision.aAppeler().length;
     document.querySelectorAll('[data-tab="leads"]').forEach(b => {
       let p = b.querySelector('.pastille');
       if (!n) { p?.remove(); return; }
@@ -169,6 +170,7 @@ const Reseau = (() => {
     const lot = leads.filter(x => VUES[vue].includes(x.lead.statut));
     const aVerser = leads.filter(x => x.lead.statut === 'vendu' && !x.lead.payee).reduce((s, x) => s + num(x.lead.commission_finale), 0);
     $('#list').innerHTML = `<div class="leads-page">
+      ${Revision.bascule()}
       ${actif() ? '' : `<div class="panneau lead-info"><strong>Rejoins le réseau Ocaz</strong><p class="hint">Des apporteurs d'affaires présentent tes véhicules à leurs contacts et t'envoient des clients prêts à acheter. Tu ne paies une commission que sur les ventes conclues. Active-le dans Paramètres &gt; Réseau Ocaz.</p>
         <button type="button" class="chip active" data-aller="parametres">Activer le réseau</button></div>`}
       <div class="chips lead-vues">${Object.keys(VUES).map(k => `<button type="button" class="chip${k === vue ? ' active' : ''}" data-lead-vue="${k}">${k}${n[k] ? ' · ' + n[k] : ''}</button>`).join('')}</div>
@@ -234,7 +236,7 @@ const Reseau = (() => {
     const nv = nouveaux();
     const encours = leads.filter(x => x.lead.statut === 'en_cours').length;
     const aVerser = leads.filter(x => x.lead.statut === 'vendu' && !x.lead.payee);
-    return `<section class="panneau">
+    return `<section class="panneau demandes">
       <div class="p-tete"><h3>Leads du réseau <span class="compte">${nv.length}</span></h3><button type="button" class="lien hint" data-aller="leads">Voir les leads →</button></div>
       ${nv.length ? nv.slice(0, 4).map(x => `<div class="demande"><div><strong>${esc([x.lead.client_prenom, x.lead.client_nom].join(' '))}</strong> <span class="hint">${dateFr(x.lead.cree_le)}</span>
         <span class="sub">🚗 ${esc(x.lead.vehicule)} · par ${esc(apporteurNom(x.apporteur))}</span></div>
@@ -261,5 +263,5 @@ const Reseau = (() => {
     $('#lead-annuler').addEventListener('click', () => $('#dlg-lead').close());
   }
 
-  return { init, demarrer, arreter, planifier, publier, charger, rendreLeads, panneau, clic, champVehicule, partage, actif };
+  return { init, demarrer, arreter, planifier, publier, charger, rendreLeads, majPastille, nouveaux, panneau, clic, champVehicule, partage, actif };
 })();

@@ -442,9 +442,10 @@ let current = 'clients';
 let editing = null;
 
 function render() {
+  Reseau.majPastille();
   if (onglet === 'donnees') { renderFiltres(); Donnees.rendre(); return; }
   if (onglet === 'parametres') { renderFiltres(); return; }
-  if (onglet === 'leads') { renderFiltres(); Reseau.rendreLeads(); return; }
+  if (onglet === 'leads') { renderFiltres(); Revision.rendreOnglet(); return; }
   if (onglet === 'stock' && (vueStock === 'partenaires' || !Droits.achat())) { vueStock = 'partenaires'; renderFiltres(); Partenaires.rendre(); return; }
   const tab = TABS[current];
   const q = norm($('#search').value.trim());
@@ -962,6 +963,7 @@ $('#dlg').addEventListener('close', () => { apresEnregistrement = null; ficheEnC
 // Onglet Paramètres : réglages du garage (partagés) et de cet appareil.
 function remplirParametres() {
   Param.rendre();
+  Revision.rendreParam();
   const sb = Sync.settings();
   $('#set-sb-url').value = sb.url || '';
   $('#set-sb-cle').value = sb.cle || '';
@@ -1207,6 +1209,7 @@ $('#btn-add').addEventListener('click', () => (onglet === 'commandes' ? Offre.ou
 $('#list').addEventListener('click', e => {
   if (e.target.closest('[data-stop]')) return;
   if (Reseau.clic(e)) return;
+  if (Revision.clic(e)) return;
   if (Partenaires.clic(e)) return;
   const police = e.target.closest('[data-police]');
   if (police) { Papiers.ouvrirPolice(); return; }
@@ -1275,6 +1278,7 @@ DepotVente.init();
 Partenaires.init();
 EnLigne.init();
 Reseau.init();
+Revision.init();
 Import.init();
 let redim = null;
 window.addEventListener('resize', () => { clearTimeout(redim); if (onglet === 'donnees') redim = setTimeout(render, 150); });

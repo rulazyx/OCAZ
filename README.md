@@ -57,6 +57,15 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`),
   Réseau (choisir un véhicule et envoyer un client, avec son accord RGPD et une reprise éventuelle), Paramètres (infos, RIB,
   factures de commission, contrat). Démo : identifiant `apporteur`, mot de passe `test`.
 
+## Rappels de révision (leads « Révision »)
+
+- 11 mois après une commande livrée (délai réglable dans Paramètres > Révisions), le client apparaît dans l'onglet **Leads > Révisions**
+  (« À appeler », avec « À venir » pour le mois suivant, puis RDV / Faites / Closes) et sur l'accueil (Données). L'onglet Leads est donc
+  visible pour tous les revendeurs ; la bascule Réseau / Révisions n'apparaît qu'avec le droit réseau.
+- Prix proposé = coût de la révision + marge du garage, arrondi à 5 €. Le coût est la ligne « Vidange et filtres » de la préparation
+  du véhicule vendu (son tarif prépa), sinon le coût réglé dans Paramètres. Le suivi est gardé sur la commande (`revision`).
+- Aucun mail n'est envoyé au client : c'est le garage qui l'appelle. Rien à installer côté Supabase.
+
 ## Technique
 
 Appli web statique (HTML, CSS, JavaScript, sans build), hébergeable gratuitement sur GitHub Pages.

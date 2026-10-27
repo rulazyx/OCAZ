@@ -97,12 +97,15 @@ const Demo = (() => {
       v('Renault', 'Clio', '1.5 dCi 90 Zen', 2017, 88000, 'Diesel', 'Manuelle', 'Citadine', 'Gris', 'Reprise validée', null, '', '', '',
         { vendeurId: C['Hoarau'], coteLaCentrale: 8400, coteLeboncoin: 8900, fraisMecanique: 300, fraisSupposes: 150, prixPropose: 6200, immatriculation: 'EY-208-RE' }),
     ];
-    // Ventes livrées sur les 5 derniers mois.
+    // Ventes livrées sur les 5 derniers mois (et trois autour de 11 mois).
     const ventes = [
       ['Renault', 'Captur', 2019, 'SUV / 4x4', 12, 40, 13200, 17900, 'Payet'], ['Toyota', 'Aygo', 2020, 'Citadine', 25, 30, 7400, 10500, 'Fontaine'],
       ['Peugeot', '3008', 2018, 'SUV / 4x4', 48, 55, 15500, 20900, 'Boyer'], ['Suzuki', 'Swift', 2019, 'Citadine', 70, 28, 8800, 12400, 'Maillot'],
       ['Dacia', 'Sandero', 2021, 'Citadine', 95, 22, 8600, 11900, 'Rivière'], ['Ford', 'Fiesta', 2018, 'Citadine', 128, 60, 6900, 9900, 'Grondin'],
       ['Renault', 'Kangoo', 2017, 'Utilitaire', 150, 75, 8200, 12500, 'Hoarau'],
+      // Ventes d'il y a 11 mois environ : elles donnent les leads « Révision » de la démo.
+      ['Peugeot', '208', 2018, 'Citadine', 340, 35, 9200, 12900, 'Técher'], ['Hyundai', 'Tucson', 2019, 'SUV / 4x4', 352, 40, 16200, 21500, 'Rivière'],
+      ['Citroën', 'C3', 2019, 'Citadine', 322, 30, 7900, 11200, 'Grondin'],
     ].map(([marque, modele, annee, type, il, sejour, achat, vente, client]) => ({
       v: v(marque, modele, '', annee, 50000 + annee % 7 * 9000, 'Essence', 'Manuelle', type, 'Gris', 'Vendu', il + sejour, achat, vente, 400, { dateVente: jour(-il) }),
       il, vente, client,
@@ -158,6 +161,10 @@ const Demo = (() => {
     vehicules[6].prepa = [['Vidange et filtres', true, 180], ['Pneus', true, 360], ['Freins', false, 240], ['Contrôle technique', false, 78],
       ['Carrosserie', false, 300], ['Nettoyage intérieur', true, 60]].map(([nom, fait, montant], i) => ({ id: 'p' + i, nom, fait, montant }));
     vehicules[6].fraisReels = 600;
+    // Tarif prépa des véhicules vendus il y a 11 mois : la vidange sert au prix de la révision proposée.
+    ventes.filter(x => x.il > 300).forEach((x, i) => {
+      x.v.prepa = [['Vidange et filtres', true, [140, 190, 125][i]], ['Nettoyage intérieur', true, 60]].map(([nom, fait, montant], j) => ({ id: 'r' + i + j, nom, fait, montant }));
+    });
     clients[3].interets = [vehicules[2].id];
     clients[1].interets = [vehicules[7].id];
 
@@ -168,7 +175,8 @@ const Demo = (() => {
     db.data.planning = planning;
     db.data.seq = seq;
     Param.save({ garage: { ...Param.get().garage, nom: 'Garage Démo', ville: 'Saint-Pierre', telephone: '0262 00 00 00' },
-      reseau: { ...Param.get().reseau, actif: true, accepteLe: maintenant } });
+      reseau: { ...Param.get().reseau, actif: true, accepteLe: maintenant },
+      revision: { ...(Param.get().revision || {}), cout: 120, margeType: 'pourcentage', margeValeur: 30 } });
   }
 
   return { remplir, completerPhotos, illustration };
