@@ -14,17 +14,18 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
 - Sauvegarde : export / import d'un fichier `.json` (menu ⋯).
 
-## Ocaz Pro (pro.ocaz.re)
+## Ocaz Pro (ocaz.re)
 
-Ce dépôt est l'appli des pros, à l'adresse `pro.ocaz.re`. Le site public (véhicules du réseau, vitrines des garages, `integrer.js`,
-pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`), à l'adresse `ocaz.re`.
+Ce dépôt est l'appli des pros, à l'adresse `ocaz.re`. Le site public (véhicules du réseau, vitrines des garages, `integrer.js`,
+pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`), à l'adresse `reseau.ocaz.re`.
 - L'appli n'est pas référencée : `robots.txt` interdit tout, et chaque page a `<meta name="robots" content="noindex">`.
   Aucun lien du site public ne mène ici : Anthony envoie lui-même l'adresse aux pros. La vraie protection reste la connexion.
 - L'appli s'ouvre directement sur la connexion unique, sans choix de profil ; l'espace (garage ou apporteur) dépend du compte.
 - Un compte qui est à la fois garage et apporteur passe d'un espace à l'autre avec le bouton ⇄ de l'en-tête.
 - `/apporteur` sans connexion renvoie vers la connexion (plus d'inscription en ligne : voir « Comptes et droits »).
-- Les liens de vitrine et le code d'intégration générés dans Paramètres pointent vers `https://ocaz.re/`.
-- `404.html` renvoie toute autre adresse vers ocaz.re.
+- Les liens de vitrine et le code d'intégration générés dans Paramètres pointent vers `https://reseau.ocaz.re/`.
+- Jusqu'au 27/10/2026 le site public était sur `ocaz.re` : `404.html` renvoie toute autre adresse (`/reseau`, `/vitrine?g=…`,
+  pages légales…) vers reseau.ocaz.re, et `integrer.js` reste ici pour les codes déjà collés sur des sites de garages.
 
 ## Comptes et droits (administrateur)
 
@@ -79,13 +80,13 @@ dans `app.js` pour pouvoir brancher une base en ligne (Supabase) et synchroniser
 
 Pour l'essayer en local : ouvrir `index.html` dans un navigateur.
 
-## Adresse pro.ocaz.re
+## Adresse ocaz.re
 
-Le fichier `CNAME` (contenu : `pro.ocaz.re`) relie ce dépôt au sous-domaine.
-- OVH, zone DNS de `ocaz.re` : 1 `CNAME` sur `pro` vers `rulazyx.github.io.`
-- GitHub > Settings > Pages : Source = Deploy from a branch, `main`, `/ (root)` ; Custom domain = `pro.ocaz.re` ; Enforce HTTPS.
-- Supabase > Authentication > URL Configuration : ajouter `https://pro.ocaz.re/**` aux Redirect URLs.
-Les données gardées dans le navigateur dépendent de l'adresse : sur pro.ocaz.re il faut se reconnecter une fois.
+Le fichier `CNAME` (contenu : `ocaz.re`) relie ce dépôt au domaine (zone DNS OVH : 4 `A` sur `@` vers GitHub Pages, `www` en CNAME).
+- GitHub > Settings > Pages : Source = Deploy from a branch, `main`, `/ (root)` ; Custom domain = `ocaz.re` ; Enforce HTTPS.
+  Le domaine doit d'abord être retiré des réglages Pages du dépôt `ocaz` (un domaine ne peut servir qu'un dépôt).
+- Supabase > Authentication > URL Configuration : Site URL = `https://ocaz.re`, Redirect URLs `https://ocaz.re/**`.
+Les données gardées dans le navigateur dépendent de l'adresse : en changeant d'adresse, il faut se reconnecter une fois.
 
 ## Synchronisation PC / téléphone (Supabase)
 
