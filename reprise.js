@@ -9,6 +9,7 @@ const Reprise = (() => {
   const BOITES = ['', 'Manuelle', 'Automatique'];
   let etat = null;
   let extra = {}; // données complètes renvoyées par la recherche par plaque
+  let trouve = ''; // véhicule trouvé par la plaque, affiché sous le champ
 
   // Fourchette de reprise : prix de revente estimé à La Réunion, moins les frais, moins la marge visée.
   function calcul(v) {
@@ -40,11 +41,12 @@ const Reprise = (() => {
     $('#reprise-body').innerHTML = `
       ${etat.statut === 'Reprise à étudier' ? `<div class="segmented mode-choix"><button type="button" data-mode="achat" class="${depot ? '' : 'active'}">Achat / reprise</button>
         <button type="button" data-mode="depot" class="${depot ? 'active' : ''}">Dépôt-vente</button></div>` : ''}
+      ${etat.image ? `<div class="vehicule-image"><img src="${esc(etat.image)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
       <div class="lookup">
         <div class="field"><label for="r-immatriculation">Plaque d'immatriculation</label>
           <div class="inline"><input id="r-immatriculation" data-r="immatriculation" value="${esc(etat.immatriculation || '')}" placeholder="AB-123-CD" autocapitalize="characters">
           <button type="button" id="r-btn-plaque">Rechercher</button></div>
-          <span class="hint">La plaque remplit les champs ci-dessous. Sinon, saisis-les à la main.</span></div>
+          <span class="hint">${trouve ? 'Trouvé : ' + esc(trouve) : 'La plaque remplit marque, modèle, version et l\'image du modèle. Sinon, saisis-les à la main.'}</span></div>
       </div>
       <h3 class="section">Infos pour la cote</h3>
       <div class="grid">
@@ -155,7 +157,7 @@ const Reprise = (() => {
 
   function ouvrir(id, preset = {}) {
     etat = id ? { ...db.get('vehicules', id) } : { statut: 'Reprise à étudier', mode: Param.get().activite.mode, ...preset };
-    extra = {};
+    extra = {}; trouve = '';
     if (id) page2(); else page1();
     $('#dlg-reprise').showModal();
   }
@@ -167,7 +169,7 @@ const Reprise = (() => {
     const saved = db.upsert('vehicules', { ...etat, ...extra, ...patch, coteRetenue: c.cote || '', fraisEstimes: c.frais || '',
       ...(enBase ? { documents: enBase.documents, annonces: enBase.annonces } : {}) });
     etat = { ...saved };
-    extra = {};
+    extra = {}; trouve = '';
     return saved;
   }
 
@@ -235,10 +237,12 @@ const Reprise = (() => {
           ['miseEnCirculation', 'couleur', 'type', 'puissanceCh', 'puissanceFiscale', 'cylindree', 'co2', 'portes', 'places', 'vin', 'image', 'ficheTechnique']
             .forEach(k => { if (r[k]) extra[k] = r[k]; });
           if (r.image) etat.image = r.image;
+          trouve = r.description || [r.marque, r.modele, r.finition].filter(Boolean).join(' ');
           const ext = extra;
           page1();
           extra = ext;
-          toast('Véhicule trouvé : ' + (r.description || vehiculeNom(r)));
+          const usage = Plaque.usageTexte();
+          toast('Véhicule trouvé' + (usage ? ` (${usage})` : ''));
         } catch (err) {
           toast(err.message);
         } finally {

@@ -754,7 +754,8 @@ function wireVehicule() {
       $('#fiche-n').textContent = Object.keys(r.ficheTechnique).length;
       $('#fiche').hidden = false;
       $('#vin-hint').textContent = r.description ? 'Trouvé : ' + r.description : 'Véhicule trouvé.';
-      toast(`${n} champs remplis automatiquement (${Plaque.usageCeMois()} recherche(s) ce mois-ci)`);
+      const usage = Plaque.usageTexte();
+      toast(`${n} champs remplis automatiquement` + (usage ? ` (${usage})` : ''));
     } catch (err) {
       toast(err.message);
     } finally {
@@ -927,10 +928,6 @@ $('#dlg').addEventListener('close', () => { apresEnregistrement = null; ficheEnC
 // Onglet Paramètres : réglages du garage (partagés) et de cet appareil.
 function remplirParametres() {
   Param.rendre();
-  const s = Plaque.settings();
-  $('#set-cle').value = s.cle;
-  $('#set-host').value = s.host;
-  $('#set-token').value = s.token;
   const sb = Sync.settings();
   $('#set-sb-url').value = sb.url || '';
   $('#set-sb-cle').value = sb.cle || '';
@@ -942,7 +939,6 @@ function remplirParametres() {
   Reseau.rendreParametres();
   Reseau.afficherApporteurs();
   majInstall();
-  $('#set-usage').textContent = `${Plaque.usageCeMois()} recherche(s) par plaque ce mois-ci sur cet appareil (10 gratuites par mois avec l'offre Basic).`;
 }
 $('#btn-menu').addEventListener('click', () => switchTab('parametres'));
 
@@ -1184,11 +1180,6 @@ $('#btn-copier-lien').addEventListener('click', async () => {
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 
-$('#btn-save-plaque').addEventListener('click', () => {
-  Plaque.saveSettings({ cle: $('#set-cle').value.trim(), host: $('#set-host').value.trim() || Plaque.DEFAULT_HOST, token: $('#set-token').value.trim() });
-  $('#set-usage').textContent = 'Clé enregistrée sur cet appareil.';
-  toast('Clé enregistrée sur cet appareil');
-});
 
 $('#btn-export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(db.data, null, 2)], { type: 'application/json' });

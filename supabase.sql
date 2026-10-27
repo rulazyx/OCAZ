@@ -730,3 +730,43 @@ language sql stable security definer set search_path = public as $$
   where r.actif and e.demo;
 $$;
 grant execute on function public.crm_reseau_demo() to anon, authenticated;
+
+-- ===== Recherche par plaque (fonction Supabase « plaque ») =====
+-- La clé du fournisseur reste dans les secrets Supabase : l'appli appelle la fonction, jamais le fournisseur.
+-- Résultats gardés 180 jours : rechercher deux fois la même plaque ne coûte qu'une fois.
+create table if not exists public.crm_plaque_cache (
+  plaque text primary key,
+  data jsonb not null,
+  cree_le timestamptz not null default now()
+);
+-- Nombre de recherches payantes par garage et par mois.
+create table if not exists public.crm_plaque_compteur (
+  entreprise_id uuid not null references public.crm_entreprises (id) on delete cascade,
+  mois text not null,
+  nb integer not null default 0,
+  primary key (entreprise_id, mois)
+);
+alter table public.crm_plaque_cache enable row level security;
+alter table public.crm_plaque_compteur enable row level security;
+drop policy if exists "Plaque : compteur du garage" on public.crm_plaque_compteur;
+create policy "Plaque : compteur du garage" on public.crm_plaque_compteur for select to authenticated
+  using (entreprise_id = public.crm_entreprise());
+
+-- Réserve une recherche pour le garage si sa limite du mois n'est pas atteinte. Réservée à la fonction Supabase.
+create or replace function public.crm_plaque_reserver(p_entreprise uuid, p_limite integer) returns integer
+language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  insert into public.crm_plaque_compteur (entreprise_id, mois, nb) values (p_entreprise, to_char(now(), 'YYYY-MM'), 1)
+  on conflict (entreprise_id, mois) do update set nb = crm_plaque_compteur.nb + 1
+    where crm_plaque_compteur.nb < p_limite
+  returning nb into n;
+  return n; -- null : limite atteinte
+end $$;
+-- Rend la recherche si le fournisseur n'a pas répondu.
+create or replace function public.crm_plaque_rendre(p_entreprise uuid) returns void
+language sql security definer set search_path = public as $$
+  update public.crm_plaque_compteur set nb = greatest(nb - 1, 0)
+  where entreprise_id = p_entreprise and mois = to_char(now(), 'YYYY-MM');
+$$;
+revoke execute on function public.crm_plaque_reserver(uuid, integer), public.crm_plaque_rendre(uuid) from public, anon, authenticated;

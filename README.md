@@ -8,8 +8,8 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
 - **Véhicules** : parcours Reprise à étudier → validée (En préparation / En stock) ou refusée → Réservé → Vendu.
   Fiche reprise : vendeur, état, cote estimée, frais, prix proposé, avec des liens vers les cotes gratuites (La Centrale, L'argus, Leboncoin).
   Idem pour lister et modifier, avec plaque, VIN, prix d'achat/vente, statut (En stock, Réservé, Vendu…).
-  Le VIN remplit gratuitement la marque et l'année. La plaque remplit marque, modèle et finition via api-plaque.com (RapidAPI) :
-  la clé se saisit dans le menu ⋯ de l'appli et reste sur l'appareil, elle n'est jamais dans ce dépôt.
+  Le VIN remplit gratuitement la marque et l'année. La plaque remplit marque, modèle, version et l'image du modèle
+  via la fonction Supabase `plaque` (voir plus bas).
 - **Commandes** : relie un client et un véhicule, prix, acompte, statut. Le statut du véhicule suit la commande
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
 - Sauvegarde : export / import d'un fichier `.json` (menu ⋯).
@@ -64,3 +64,14 @@ Les données gardées dans le navigateur dépendent de l'adresse : sur pro.ocaz.
 
 Toutes les données d'un compte sont dans une ligne JSON de la table `crm_data`, protégée par une règle d'accès (RLS).
 La modification la plus récente l'emporte.
+
+## Recherche par plaque (fonction Supabase `plaque`)
+
+- `supabase/functions/plaque/index.ts` interroge le fournisseur (immatriculationapi.com conseillé, 0,20 € la recherche ;
+  ou une API plaque RapidAPI). La clé est un **secret Supabase**, jamais dans l'appli ni dans ce dépôt.
+- Secrets : `PLAQUE_UTILISATEUR` (immatriculationapi.com) ou `PLAQUE_RAPIDAPI_CLE` (+ `PLAQUE_RAPIDAPI_HOST`),
+  et `PLAQUE_LIMITE_MOIS` (30 recherches payantes par garage et par mois par défaut).
+- Une plaque déjà cherchée (par n'importe quel garage, moins de 180 jours) est resservie gratuitement depuis `crm_plaque_cache`.
+- Compte démo : seulement les plaques déjà en cache. Tables et compteur : fin de `supabase.sql`.
+- Installation : Supabase > Edge Functions > Deploy a new function > Via Editor, nom `plaque`, coller `index.ts`,
+  décocher « Verify JWT » (la fonction vérifie elle-même le compte connecté).

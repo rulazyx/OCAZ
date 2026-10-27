@@ -1,27 +1,22 @@
-// Recherche par plaque via api-plaque.com (passerelle RapidAPI).
-// La clé est saisie dans les réglages de l'appli et reste sur l'appareil :
-// elle n'est jamais écrite dans le code du dépôt.
+// Recherche par plaque : l'appli appelle la fonction Supabase « plaque » (supabase/functions/plaque),
+// qui interroge le fournisseur avec la clé gardée dans les secrets Supabase. Aucune clé dans l'appli.
 const Plaque = (() => {
-  const KEY = 'crmzx-plaque';
-  const DEFAULT_HOST = 'api-plaque-immatriculation-france-donnees-vehicule-siv.p.rapidapi.com';
+  // Anciennes clés RapidAPI gardées sur l'appareil par la version précédente : plus utilisées.
+  try { localStorage.removeItem('crmzx-plaque'); } catch (e) { /* stockage indisponible */ }
 
-  function settings() {
-    let s = {};
-    try { s = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { /* vide */ }
-    return { cle: s.cle || '', host: s.host || DEFAULT_HOST, token: s.token || '', usage: s.usage || {} };
-  }
-  function saveSettings(patch) {
-    const s = Object.assign(settings(), patch);
-    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* stockage indisponible */ }
-  }
-  const mois = () => new Date().toISOString().slice(0, 7);
-  const usageCeMois = () => settings().usage[mois()] || 0;
+  // Compteur du mois, renvoyé par la fonction (par garage).
+  let compteur = { utilisees: null, limite: null };
+  const usageTexte = () => compteur.utilisees == null ? '' : `${compteur.utilisees}/${compteur.limite} recherches par plaque ce mois-ci pour le garage`;
 
-  const CARBURANTS = { GAZOLE: 'Diesel', DIESEL: 'Diesel', ESSENCE: 'Essence', ELECTRIC: 'Électrique', ELECTRIQUE: 'Électrique', GPL: 'GPL' };
-  const titre = s => (s || '').toLowerCase().replace(/(^|[\s-])\S/g, c => c.toUpperCase());
+  const CARBURANTS = { GAZOLE: 'Diesel', DIESEL: 'Diesel', ESSENCE: 'Essence', ELECTRIC: 'Électrique', ELECTRIQUE: 'Électrique', GPL: 'GPL', PETROL: 'Essence' };
+  // Codes courts de la carte grise (champ P.3).
+  const CODES = { GO: 'Diesel', D: 'Diesel', ES: 'Essence', EL: 'Électrique', GP: 'GPL', EH: 'Hybride', GH: 'Hybride', EE: 'Hybride rechargeable', GL: 'Hybride rechargeable' };
+  const titre = s => (s || '').toLowerCase().replace(/(^|[\s-])\S/g, c => c.toUpperCase())
+    .replace(/\b(i{1,3}|iv|vi{0,3}|ix)\b/gi, c => c.toUpperCase()); // Scénic III
 
   function carburant(energie) {
     const e = (energie || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (CODES[e.trim()]) return CODES[e.trim()];
     if (e.includes('RECHARGEABLE')) return 'Hybride rechargeable';
     if (e.includes('HYBRID')) return 'Hybride';
     for (const k in CARBURANTS) if (e.includes(k)) return CARBURANTS[k];
@@ -29,38 +24,21 @@ const Plaque = (() => {
   }
 
   async function rechercher(plaque) {
-    const s = settings();
-    if (!s.cle) throw new Error("Ajoute d'abord ta clé api-plaque dans le menu ⋯ > Recherche par plaque.");
     const p = (plaque || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (p.length < 5) throw new Error("Saisis la plaque d'abord.");
-    const host = s.host.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    let res;
+    const client = window.Sync && Sync.client;
+    if (!client || !Sync.user) throw new Error('Connecte-toi pour rechercher une plaque.');
+    let json;
     try {
-      // Certaines offres demandent en plus un paramètre `token` (visible dans le Playground RapidAPI).
-      const params = new URLSearchParams({ plaque: p });
-      if (s.token) params.set('token', s.token);
-      res = await fetch(`https://${host}/fr?${params}`, {
-        // Le service derrière RapidAPI (Autoways) exige aussi son propre token en « Authorization: Bearer ».
-        headers: { 'x-rapidapi-key': s.cle, 'x-rapidapi-host': host, ...(s.token ? { Authorization: 'Bearer ' + s.token } : {}) },
-      });
+      const { data, error } = await client.functions.invoke('plaque', { body: { plaque: p } });
+      if (error) throw error;
+      json = data || {};
     } catch (e) {
-      throw new Error("Pas de réponse du service. Vérifie ta connexion ou l'adresse du service dans les réglages.");
+      throw new Error("Le service de plaque ne répond pas. Si c'est la première fois, la fonction « plaque » n'est peut-être pas encore installée dans Supabase.");
     }
-    saveSettings({ usage: Object.assign(s.usage, { [mois()]: usageCeMois() + 1 }) });
-    let json = {};
-    try { json = await res.json(); } catch (e) { /* réponse non JSON */ }
-    // RapidAPI explique le refus dans `message` : on l'affiche tel quel, traduit quand on le reconnaît.
-    const msg = json.message || '';
-    if (/token/i.test(msg)) throw new Error(s.token ? 'Token refusé par le service : vérifie le token Autoways dans le menu ⚙️.' : 'Le service demande un token Autoways : colle-le dans le menu ⚙️, champ Token.');
-    if (res.status === 401 || res.status === 403) {
-      if (/not subscribed/i.test(msg)) throw new Error("RapidAPI : tu n'es pas abonné à cette API. Sur sa page RapidAPI, onglet Pricing, choisis l'offre Basic (Subscribe).");
-      if (/invalid api key/i.test(msg)) throw new Error('RapidAPI : clé invalide. Recopie la X-RapidAPI-Key dans le menu ⚙️.');
-      throw new Error('Accès refusé par RapidAPI (' + res.status + ')' + (msg ? ' : ' + msg : '.'));
-    }
-    if (res.status === 404 || /does not exist/i.test(msg)) throw new Error("Service introuvable : vérifie l'adresse X-RapidAPI-Host dans le menu ⚙️." + (msg ? ' (' + msg + ')' : ''));
-    if (res.status === 429) throw new Error('Quota atteint pour ce mois.');
-    if (!res.ok || json.error || !json.data) throw new Error(json.message || `Véhicule introuvable (erreur ${res.status}).`);
-    const d = json.data;
+    if (json.erreur) throw new Error(json.erreur);
+    if (json.utilisees != null) compteur = { utilisees: json.utilisees, limite: json.limite };
+    const d = json.data || {};
     // Le service renvoie plus de 80 champs dont les noms varient : on cherche par mot-clé.
     const pick = (...motifs) => {
       for (const m of motifs) {
@@ -80,7 +58,7 @@ const Plaque = (() => {
       annee: mec ? mec[3] : pick(/annee(?!.*(debut|fin))/i),
       miseEnCirculation: mec ? `${mec[3]}-${mec[2]}-${mec[1]}` : '',
       carburant: carburant(pick(/energie(?!.*code)/i, /carburant/i, /fuel/i)),
-      boite: /auto|robot|cvt|dsg|edc|eat/i.test(boite) ? 'Automatique' : /manu|meca/i.test(boite) ? 'Manuelle' : '',
+      boite: /auto|robot|cvt|dsg|edc|eat|^a$/i.test(boite) ? 'Automatique' : /manu|meca|^m$/i.test(boite) ? 'Manuelle' : '',
       couleur: titre(pick(/couleur/i, /colou?r/i)),
       type: typeVehicule(carrosserie, genre),
       puissanceCh: pick(/puissance_chevaux/i, /puisFiscReelCH/i, /puissance_din/i),
@@ -90,10 +68,10 @@ const Plaque = (() => {
       portes: pick(/portes/i),
       places: pick(/places|passagers|seats/i),
       vin: pick(/_VIN$/i, /^vin$/i),
-      image: pick(/model_image/i, /photo_modele/i),
-      description: pick(/selector_modele_label/i, /tecdoc_modele_description/i, /label$/i),
+      image: json.image || pick(/model_image/i, /photo_modele/i),
+      description: json.description || pick(/selector_modele_label/i, /tecdoc_modele_description/i, /label$/i),
       // Tout ce que renvoie le service, gardé dans la fiche du véhicule.
-      ficheTechnique: Object.fromEntries(Object.entries(d)
+      ficheTechnique: Object.fromEntries(Object.entries(json.fiche || d)
         .filter(([k, v]) => v !== '' && v != null && typeof v !== 'object' && !/image|photo|logo/i.test(k))
         .map(([k, v]) => [k.replace(/^AWN_/, '').replace(/_/g, ' '), String(v)])),
     };
@@ -113,5 +91,5 @@ const Plaque = (() => {
   }
   const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  return { settings, saveSettings, usageCeMois, rechercher, DEFAULT_HOST };
+  return { rechercher, usageTexte };
 })();
