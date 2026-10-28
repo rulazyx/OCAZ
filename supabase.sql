@@ -969,6 +969,8 @@ create table if not exists public.crm_prospects (
   maj_le timestamptz not null default now()
 );
 alter table public.crm_prospects enable row level security;
+-- Fiche d'entretien remplie pendant la visite (réponses aux questions du speech, par points).
+alter table public.crm_prospects add column if not exists entretien jsonb not null default '{}'::jsonb;
 
 create or replace function public.crm_admin_prospects() returns json
 language plpgsql stable security definer set search_path = public as $$
@@ -993,7 +995,9 @@ begin
     email = left(coalesce(p ->> 'email', ''), 120), contact = left(coalesce(p ->> 'contact', ''), 120),
     lot = left(coalesce(p ->> 'lot', ''), 20), etape = coalesce(nullif(p ->> 'etape', ''), 'a_contacter'),
     note = left(coalesce(p ->> 'note', ''), 4000), relance = nullif(p ->> 'relance', '')::date,
-    entreprise_id = nullif(p ->> 'entreprise_id', '')::uuid, maj_le = now()
+    entreprise_id = nullif(p ->> 'entreprise_id', '')::uuid,
+    entretien = case when jsonb_typeof(p -> 'entretien') = 'object' and length((p -> 'entretien')::text) <= 20000 then p -> 'entretien' else entretien end,
+    maj_le = now()
   where id = pid;
   if not found then raise exception 'Prospect introuvable.'; end if;
   return pid;

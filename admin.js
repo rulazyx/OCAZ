@@ -367,7 +367,8 @@
     return `<div class="adm-abo-ligne">
       <button type="button" class="adm-abo-nom" data-pro="${esc(p.id)}"><b>${esc(p.nom)}</b>
         <small>${esc([p.ville, p.telephone, p.contact].filter(Boolean).join(' · ') || 'Pas de coordonnées')}${r != null ? ` · <span class="${r <= 0 ? 'adm-retard' : ''}">relance ${r < 0 ? 'en retard (' + dateFr(p.relance) + ')' : r === 0 ? "aujourd'hui" : 'le ' + dateFr(p.relance)}</span>` : ''}</small>
-        ${p.note ? `<small class="adm-note">${esc(p.note.split('\n')[0])}</small>` : ''}</button>
+        ${p.note ? `<small class="adm-note">${esc(p.note.split('\n')[0])}</small>` : ''}
+        ${remplis(p.entretien) ? `<small>Entretien${p.entretien.date ? ' du ' + dateFr(p.entretien.date) : ''}${p.entretien.note ? ' · ' + esc(p.entretien.note) + '/10' : ''}${p.entretien.testeur ? ' · testeur : ' + esc(p.entretien.testeur.toLowerCase()) : ''}</small>` : ''}</button>
       ${p.telephone ? `<a class="chip" href="tel:${esc(p.telephone.replace(/\s/g, ''))}">Appeler</a>` : ''}
       <select data-etape="${esc(p.id)}" aria-label="Étape de ${esc(p.nom)}">${Object.entries(ETAPES).map(([k, [l]]) => `<option value="${k}"${p.etape === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
     </div>`;
@@ -410,20 +411,128 @@
     if (msg) toast(msg);
     return id;
   }
+  // Fiche d'entretien : les questions du speech de visite, à remplir par points pendant le rendez-vous (enregistrée toute seule).
+  const ENTRETIEN = [
+    ['Le garage', [
+      ['rencontre', 'Personne rencontrée', 'texte'],
+      ['equipe', 'Installé depuis / nombre de personnes', 'texte'],
+      ['ventesMois', 'Ventes par mois', 'nombre'],
+      ['stock', 'Véhicules en stock', 'nombre'],
+      ['achats', 'Où il achète ses voitures', 'multi', ['Reprises clients', 'Particuliers', 'Enchères', 'Import métropole', 'Autre garage']],
+      ['depot', 'Fait du dépôt-vente', 'choix', ['Oui', 'Non', 'Parfois']],
+      ['roles', 'Qui vend, qui fait les papiers, qui répond aux annonces', 'long'],
+    ]],
+    ['Ce qui l\'énerve aujourd\'hui', [
+      ['accroche', '« Vos offres, factures, livre de police, vous les faites comment ? »', 'long'],
+    ]],
+    ['Préparation et contrôle technique', [
+      ['prepaQui', 'Qui prépare les voitures', 'choix', ['Lui-même', 'Son atelier', 'Préparateur extérieur']],
+      ['prepaCout', 'Coût moyen d\'une préparation (€)', 'nombre'],
+      ['fraisNotes', 'Note ses frais pour connaître sa vraie marge', 'choix', ['Oui', 'Non', 'Approximativement']],
+      ['ct', 'Contrôle technique (centre, avant ou après la vente)', 'texte'],
+      ['revision', 'Atelier d\'entretien / rappelle les clients pour la révision', 'choix', ['Oui', 'Atelier mais pas de rappel', 'Non']],
+    ]],
+    ['Administratif', [
+      ['police', 'Livre de police', 'choix', ['Papier', 'Logiciel', 'Excel', 'Pas tenu']],
+      ['siv', 'Cartes grises (SIV)', 'choix', ['Habilité SIV', 'Prestataire', 'Ne sait pas']],
+      ['wGarage', 'W garage', 'choix', ['Oui', 'Non']],
+      ['factures', 'Offres, bons de commande, factures, TVA sur marge', 'texte'],
+      ['paperasse', 'La paperasse qui lui prend le plus de temps', 'texte'],
+      ['comptable', 'Ce que son comptable lui demande', 'texte'],
+    ]],
+    ['Vente et clients', [
+      ['clients', 'D\'où viennent ses clients', 'multi', ['Leboncoin', 'Facebook', 'Bouche-à-oreille', 'Passage', 'La Centrale', 'Site du garage']],
+      ['annonces', 'Temps par jour à répondre aux annonces', 'texte'],
+      ['apporteurs', 'Déjà des gens qui lui ramènent des clients contre commission', 'choix', ['Oui', 'Non']],
+      ['autresGarages', 'Travaille avec d\'autres garages', 'choix', ['Oui', 'Non']],
+    ]],
+    ['Outils actuels', [
+      ['logiciel', 'Logiciel aujourd\'hui', 'multi', ['Spider VO', 'Autre logiciel', 'Excel', 'Papier', 'Rien']],
+      ['logicielCout', 'Combien il paie par mois (€)', 'nombre'],
+      ['logicielAvis', 'Ce qui lui plaît / ce qui l\'énerve dedans', 'long'],
+      ['support', 'Travaille plutôt sur', 'choix', ['Téléphone', 'Ordinateur', 'Les deux']],
+    ]],
+    ['Démo', [
+      ['reactions', 'Ce qui l\'a fait réagir', 'multi', ['Stock et marge réelle', 'Reprise par plaque', 'Offre → facture TVA sur marge', 'Livre de police', 'Réseau d\'apporteurs', 'Site et vitrine', 'Rappel révision', 'Dépôt-vente']],
+      ['demoNotes', 'Remarques pendant la démo', 'long'],
+    ]],
+    ['Conclusion', [
+      ['note', 'Sur 10, ça lui servirait combien', 'note'],
+      ['manque', 'Ce qui manque pour avoir 10', 'long'],
+      ['baguette', 'Baguette magique : ce qu\'il changerait en premier', 'long'],
+      ['prix', 'Prix par mois qui lui paraît correct (€)', 'nombre'],
+      ['objections', 'Objections', 'multi', ['Déjà un logiciel', 'Le papier ça marche', 'Pas le temps', 'Trop cher', 'Mes données', 'Les apporteurs', 'Vraie entreprise ?']],
+      ['objectionsNotes', 'Détail des objections et questions à reprendre', 'long'],
+      ['testeur', 'Garage testeur', 'choix', ['Oui', 'Hésite', 'Non']],
+      ['sondage', 'Sondage proposé', 'choix', ['Rempli sur place', 'Envoyé par WhatsApp', 'Non']],
+      ['recommande', 'Autres garagistes à aller voir', 'texte'],
+      ['suite', 'Prochaine étape convenue', 'texte'],
+    ]],
+  ];
+  const remplis = en => ENTRETIEN.flatMap(([, ch]) => ch).filter(([k]) => { const v = en?.[k]; return Array.isArray(v) ? v.length : v != null && v !== ''; }).length;
+  const NB_CHAMPS = ENTRETIEN.reduce((s, [, ch]) => s + ch.length, 0);
+  function rendreEntretien() {
+    const en = pro.entretien || {};
+    const champ = ([k, l, type, opts]) => {
+      const v = en[k];
+      if (type === 'choix' || type === 'multi' || type === 'note') {
+        const liste = type === 'note' ? ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] : opts;
+        const actif = o => type === 'multi' ? (v || []).includes(o) : String(v ?? '') === o;
+        return `<div class="field full"><span class="adm-en-l">${esc(l)}</span><div class="chips adm-en-chips${type === 'note' ? ' adm-en-note' : ''}">${liste.map(o =>
+          `<button type="button" class="chip${actif(o) ? ' active' : ''}" data-en-chip="${k}" data-type="${type}" data-val="${esc(o)}" aria-pressed="${actif(o)}">${esc(o)}</button>`).join('')}</div></div>`;
+      }
+      if (type === 'long') return `<div class="field full"><label for="en-${k}">${esc(l)}</label><textarea id="en-${k}" data-en="${k}" rows="2">${esc(v || '')}</textarea></div>`;
+      return `<div class="field${type === 'nombre' ? '' : ' full'}"><label for="en-${k}">${esc(l)}</label><input id="en-${k}" data-en="${k}" ${type === 'nombre' ? 'type="number" inputmode="decimal"' : 'type="text"'} value="${esc(v ?? '')}" autocomplete="off"></div>`;
+    };
+    return `<div class="adm-en-tete"><div class="field"><label for="en-date">Date de l'entretien</label><input id="en-date" data-en="date" type="date" value="${esc(en.date || auj())}"></div>
+        <span class="hint" id="pro-etat">${remplis(en)} point(s) sur ${NB_CHAMPS} · enregistré automatiquement</span></div>
+      ${ENTRETIEN.map(([titre, champs], i) => `<details class="adm-en-section"${i < 2 || champs.some(([k]) => en[k] != null && en[k] !== '' && !(Array.isArray(en[k]) && !en[k].length)) ? ' open' : ''}>
+        <summary>${esc(titre)}</summary><div class="grid">${champs.map(champ).join('')}</div></details>`).join('')}`;
+  }
+  // Enregistrement automatique, une seconde après la dernière saisie (et à la fermeture de la fiche).
+  function planifierSauvegarde() {
+    clearTimeout(planifierSauvegarde.t);
+    if (!pro.entretien.date) pro.entretien.date = auj();
+    const etat = $('#pro-etat');
+    if (etat) etat.textContent = 'Modification…';
+    planifierSauvegarde.t = setTimeout(sauverEntretien, 1000);
+  }
+  async function sauverEntretien() {
+    clearTimeout(planifierSauvegarde.t);
+    planifierSauvegarde.t = null;
+    lireProspect();
+    const etat = $('#pro-etat');
+    if (!pro.nom) { if (etat) etat.textContent = 'Donne un nom au garage pour enregistrer.'; return; }
+    try {
+      pro.id = await rpc('crm_admin_prospect_enregistrer', { p: pro });
+      const i = (prospects || []).findIndex(x => x.id === pro.id);
+      if (i >= 0) prospects[i] = { ...pro }; else (prospects = prospects || []).push({ ...pro });
+      $('#pro-suppr').hidden = false;
+      if (etat) etat.textContent = `${remplis(pro.entretien)} point(s) sur ${NB_CHAMPS} · enregistré à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+      if (onglet === 'prospection' && !$('#dlg-pro').open) afficher();
+    } catch (err) { if (etat) etat.textContent = 'Pas enregistré : ' + err.message; }
+  }
   function ouvrirProspect(id, base) {
     pro = id ? { ...prospects.find(p => p.id === id) } : { etape: 'a_contacter', ...(base || {}) };
+    pro.entretien = { ...(pro.entretien || {}) };
     $('#pro-titre').textContent = id ? pro.nom : 'Ajouter un garage à démarcher';
     $('#pro-suppr').hidden = !id;
     const g = pro.entreprise_id && revendeurs.find(x => x.id === pro.entreprise_id);
     const ch = (k, l, cls, type) => `<div class="field ${cls || ''}"><label for="pf-${k}">${l}</label><input id="pf-${k}" data-pf="${k}" type="${type || 'text'}" value="${esc(pro[k] || '')}" autocomplete="off"></div>`;
+    const nEn = remplis(pro.entretien);
     $('#pro-body').innerHTML = `
+      <div class="segmented adm-pro-vues"><button type="button" data-pro-vue="fiche" class="active">Fiche</button>
+        <button type="button" data-pro-vue="entretien">Entretien${nEn ? ` (${nEn})` : ''}</button></div>
+      <div id="pro-fiche">
       <div class="grid">${ch('nom', 'Nom du garage *', 'full')}${ch('ville', 'Ville')}${ch('contact', 'Personne à voir')}${ch('telephone', 'Téléphone', '', 'tel')}${ch('email', 'Email', '', 'email')}</div>
       <h3 class="section">Suivi</h3>
       <div class="grid"><div class="field"><label for="pf-etape">Étape</label><select id="pf-etape" data-pf="etape">${Object.entries(ETAPES).map(([k, [l]]) => `<option value="${k}"${pro.etape === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
         ${ch('relance', 'Prochaine relance', '', 'date')}
         <div class="field full"><label for="pf-note">Notes (appels, objections, ce qui l'intéresse)</label><textarea id="pf-note" data-pf="note" rows="5">${esc(pro.note || '')}</textarea></div></div>
       ${id ? `<div class="adm-bloc">${g ? `<div class="adm-compte"><span>Compte revendeur créé<small>${esc(g.nom)}</small></span><button type="button" class="chip" data-voir-rev="${esc(g.id)}">Voir sa fiche</button></div>`
-        : `<div class="adm-compte"><span>Il a dit oui ?<small>Crée son compte revendeur : ses infos sont reprises et son essai gratuit démarre.</small></span><button type="button" class="chip" id="pro-convertir">Créer son compte</button></div>`}</div>` : ''}`;
+        : `<div class="adm-compte"><span>Il a dit oui ?<small>Crée son compte revendeur : ses infos sont reprises et son essai gratuit démarre.</small></span><button type="button" class="chip" id="pro-convertir">Créer son compte</button></div>`}</div>` : ''}
+      </div>
+      <div id="pro-entretien" hidden>${rendreEntretien()}</div>`;
     $('#dlg-pro').showModal();
   }
   function lireProspect() {
@@ -435,7 +544,8 @@
     if (!p.nom) { toast('Le nom du garage est obligatoire.'); $('#pf-nom').focus(); return null; }
     const btn = $('#pro-ok');
     btn.disabled = true;
-    try { const id = await enregistrerProspect(p); $('#dlg-pro').close(); return id; } catch (err) { toast(err.message); return null; }
+    clearTimeout(planifierSauvegarde.t); planifierSauvegarde.t = null;
+    try { const id = await enregistrerProspect(p); pro.id = id; $('#dlg-pro').close(); return id; } catch (err) { toast(err.message); return null; }
     finally { btn.disabled = false; }
   }
   // Fichier CSV : celui de l'appli de relance (entreprise, telephone, email, lot, statut, commentaire, date) ou un tableur
@@ -815,7 +925,33 @@
       if (!confirm(`Supprimer ${pro.nom} de la prospection ?`)) return;
       try { await rpc('crm_admin_prospect_supprimer', { p_id: pro.id }); $('#dlg-pro').close(); await chargerProspects(); } catch (err) { toast(err.message); }
     });
+    $('#pro-body').addEventListener('input', e => {
+      const k = e.target.dataset.en;
+      if (k) { pro.entretien[k] = e.target.value; planifierSauvegarde(); }
+    });
+    $('#dlg-pro').addEventListener('close', () => { if (planifierSauvegarde.t) sauverEntretien(); else if (onglet === 'prospection') afficher(); });
     $('#pro-body').addEventListener('click', async e => {
+      const vue = e.target.closest('[data-pro-vue]');
+      if (vue) {
+        document.querySelectorAll('#pro-body [data-pro-vue]').forEach(b => b.classList.toggle('active', b === vue));
+        $('#pro-fiche').hidden = vue.dataset.proVue !== 'fiche';
+        $('#pro-entretien').hidden = vue.dataset.proVue !== 'entretien';
+        return;
+      }
+      const c = e.target.closest('[data-en-chip]');
+      if (c) {
+        const k = c.dataset.enChip, val = c.dataset.val;
+        if (c.dataset.type === 'multi') {
+          const l = pro.entretien[k] || [];
+          pro.entretien[k] = l.includes(val) ? l.filter(x => x !== val) : [...l, val];
+        } else pro.entretien[k] = pro.entretien[k] === val ? '' : val;
+        c.parentElement.querySelectorAll('[data-en-chip]').forEach(b => {
+          const on = c.dataset.type === 'multi' ? pro.entretien[k].includes(b.dataset.val) : pro.entretien[k] === b.dataset.val;
+          b.classList.toggle('active', on); b.setAttribute('aria-pressed', on);
+        });
+        planifierSauvegarde();
+        return;
+      }
       const voir = e.target.dataset.voirRev;
       if (voir) { $('#dlg-pro').close(); ouvrirRevendeur(voir); return; }
       if (e.target.id === 'pro-convertir') {
