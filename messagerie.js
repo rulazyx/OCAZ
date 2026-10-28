@@ -20,6 +20,7 @@ const Messagerie = (() => {
   let client = null, moi = null, bouton = null, canal = null, mode = 'membre'; // membre | admin
   let convs = [], contacts = null, fil = null, vue = 'liste', recherche = '', contexte = '';
   let admin = { signalements: [], bloques: [] };
+  let nonLus = 0;
 
   function toast(msg) {
     const t = $('#toast');
@@ -75,18 +76,20 @@ const Messagerie = (() => {
   function montrer(v) {
     vue = v;
     const d = fenetre();
-    $('#msg-retour').hidden = v === 'liste' || v === 'admin';
+    $('#msg-retour').hidden = v === 'liste';
     $('#msg-saisie').hidden = v !== 'fil' || !!fil?.bloque || fil?.autre?.actif === false;
     if (v === 'liste') {
       $('#msg-titre').textContent = 'Messages';
-      $('#msg-sous').textContent = 'Garages et apporteurs du réseau Ocaz';
-      $('#msg-corps').innerHTML = `<div class="msg-outils"><div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span>
+      $('#msg-sous').textContent = mode === 'admin' ? 'Tu écris au nom d\'Ocaz' : 'Garages et apporteurs du réseau Ocaz';
+      const ns = admin.signalements?.length || 0;
+      $('#msg-corps').innerHTML = (mode === 'admin' ? `<button type="button" class="msg-signalements${ns ? ' actif' : ''}" data-msg-signalements>
+          ⚠ ${ns ? `${ns} message${ns > 1 ? 's' : ''} signalé${ns > 1 ? 's' : ''} à traiter` : 'Messages signalés : aucun'} <span>›</span></button>` : '') + `<div class="msg-outils"><div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span>
           <input id="msg-q" type="search" placeholder="Rechercher une conversation…" autocomplete="off" value="${esc(recherche)}"></div>
           <button type="button" class="primary" data-msg-nouveau>${icon('plus', 18)}<span>Nouveau</span></button></div>
         <div class="msg-liste" id="msg-liste">${listeConvs()}</div>`;
     } else if (v === 'contacts') {
       $('#msg-titre').textContent = 'Nouveau message';
-      $('#msg-sous').textContent = moi?.startsWith('a:') ? 'Les garages du réseau' : 'Les garages et les apporteurs du réseau';
+      $('#msg-sous').textContent = moi === 'o:ocaz' ? 'Tous les revendeurs et apporteurs' : moi?.startsWith('a:') ? 'Les garages du réseau, ou Ocaz' : 'Les garages et les apporteurs du réseau, ou Ocaz';
       $('#msg-corps').innerHTML = `<div class="msg-outils"><div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span>
           <input id="msg-q" type="search" placeholder="Rechercher un garage ou un apporteur…" autocomplete="off" value="${esc(recherche)}"></div></div>
         <div class="msg-liste" id="msg-liste">${listeContacts()}</div>`;
@@ -100,7 +103,8 @@ const Messagerie = (() => {
   }
 
   // ---------- Conversations ----------
-  const avatar = p => `<span class="avatar${p?.type === 'apporteur' ? ' msg-ap' : ''}">${esc(initiales(p?.nom))}</span>`;
+  const avatar = p => p?.type === 'ocaz' ? '<span class="avatar msg-ocaz"><img src="logo.svg" alt=""></span>'
+    : `<span class="avatar${p?.type === 'apporteur' ? ' msg-ap' : ''}">${esc(initiales(p?.nom))}</span>`;
   function listeConvs() {
     const q = norm(recherche.trim());
     const l = convs.filter(c => !q || norm([c.autre?.nom, c.autre?.sous, c.dernier_texte].join(' ')).includes(q));
@@ -120,8 +124,8 @@ const Messagerie = (() => {
     const l = contacts.filter(p => !q || norm([p.nom, p.sous].join(' ')).includes(q));
     if (!l.length) return `<div class="empty"><strong>${q ? 'Aucun résultat' : 'Personne pour le moment'}</strong><span>${q ? 'Essaie une autre recherche.' : 'Les partenaires du réseau apparaîtront ici.'}</span></div>`;
     const groupe = (titre, x) => x.length ? `<h3 class="section">${titre}</h3>` + x.map(p => `<button type="button" class="msg-conv" data-msg-contact="${esc(p.cle)}">
-      ${avatar(p)}<span class="msg-conv-txt"><b>${esc(p.nom)}</b><span class="msg-apercu">${esc(p.sous)}</span></span></button>`).join('') : '';
-    return groupe('Garages', l.filter(p => p.type === 'garage')) + groupe("Apporteurs d'affaires", l.filter(p => p.type === 'apporteur'));
+      ${avatar(p)}<span class="msg-conv-txt"><b>${esc(p.nom)}${p.demo && moi === 'o:ocaz' ? ' <span class="badge b-orange">Démo</span>' : ''}</b><span class="msg-apercu">${esc(p.sous)}</span></span></button>`).join('') : '';
+    return groupe('Support', l.filter(p => p.type === 'ocaz')) + groupe('Garages', l.filter(p => p.type === 'garage')) + groupe("Apporteurs d'affaires", l.filter(p => p.type === 'apporteur'));
   }
   async function chargerContacts() {
     try { contacts = await rpc('crm_msg_contacts', { p_moi: moi }) || []; } catch (err) { contacts = []; toast(err.message); }
@@ -130,10 +134,12 @@ const Messagerie = (() => {
   async function chargerConvs() {
     if (!client || !moi) return;
     try { convs = await rpc('crm_msg_conversations', { p_moi: moi }) || []; } catch (err) { console.error(err); return; }
-    majPastille(convs.reduce((n, c) => n + Number(c.non_lus || 0), 0));
+    nonLus = convs.reduce((n, c) => n + Number(c.non_lus || 0), 0);
+    majPastille();
     if (vue === 'liste' && $('#dlg-msg')?.open && $('#msg-liste')) $('#msg-liste').innerHTML = listeConvs();
   }
-  function majPastille(n) {
+  function majPastille() {
+    const n = nonLus + (mode === 'admin' ? admin.signalements?.length || 0 : 0);
     if (!bouton) return;
     let p = bouton.querySelector('.pastille');
     if (!n) { p?.remove(); return; }
@@ -230,11 +236,12 @@ const Messagerie = (() => {
   }
 
   function clic(e) {
-    const b = e.target.closest('[data-msg-conv],[data-msg-contact],[data-msg-nouveau],[data-msg-anciens],[data-msg-signaler],[data-adm-traiter],[data-adm-debloquer]');
+    const b = e.target.closest('[data-msg-conv],[data-msg-contact],[data-msg-nouveau],[data-msg-signalements],[data-msg-anciens],[data-msg-signaler],[data-adm-traiter],[data-adm-debloquer]');
     if (!b) return;
     const d = b.dataset;
     if (d.msgConv) ouvrirConv(d.msgConv);
     else if (d.msgContact) { recherche = ''; const p = contacts.find(x => x.cle === d.msgContact); contacter(d.msgContact, p?.nom, ''); }
+    else if (d.msgSignalements !== undefined) { montrer('admin'); chargerAdmin(); }
     else if (d.msgNouveau !== undefined) { recherche = ''; montrer('contacts'); }
     else if (d.msgAnciens !== undefined) anciens();
     else if (d.msgSignaler) signaler(d.msgSignaler);
@@ -279,20 +286,22 @@ const Messagerie = (() => {
     }
     chargerConvs();
     ecouter();
-    if (!demarrer.focus) { demarrer.focus = true; window.addEventListener('focus', () => { if (mode === 'membre') chargerConvs(); }); }
+    if (!demarrer.focus) { demarrer.focus = true; window.addEventListener('focus', () => { if (moi) chargerConvs(); }); }
   }
   function arreter() {
     if (canal) { client?.removeChannel(canal); canal = null; }
     if ($('#dlg-msg')?.open) $('#dlg-msg').close();
-    if (bouton) { bouton.hidden = true; majPastille(0); }
-    moi = null; convs = []; contacts = null; fil = null;
+    moi = null; nonLus = 0;
+    if (bouton) { bouton.hidden = true; majPastille(); }
+    convs = []; contacts = null; fil = null;
   }
 
   // ---------- Administration : messages signalés ----------
   async function chargerAdmin() {
     try { admin = await rpc('crm_msg_admin') || { signalements: [], bloques: [] }; } catch (err) { toast(err.message); return; }
-    majPastille(admin.signalements.length);
+    majPastille();
     if (vue === 'admin' && $('#dlg-msg')?.open) rendreAdmin();
+    if (vue === 'liste' && $('#dlg-msg')?.open) montrer('liste');
   }
   function rendreAdmin() {
     $('#msg-titre').textContent = 'Messagerie · signalements';
@@ -323,14 +332,11 @@ const Messagerie = (() => {
     catch (err) { toast(err.message); }
     chargerAdmin();
   }
+  // Administration : l'administrateur écrit au nom d'Ocaz et traite les messages signalés.
   function moderer(o) {
-    client = o.client; bouton = o.bouton; mode = 'admin';
-    if (bouton) {
-      bouton.hidden = false;
-      bouton.innerHTML = icon('message', 20);
-      bouton.title = 'Messages signalés';
-      bouton.onclick = () => { montrer('admin'); chargerAdmin(); };
-    }
+    demarrer({ client: o.client, moi: 'o:ocaz', bouton: o.bouton });
+    mode = 'admin';
+    if (bouton) bouton.onclick = () => { recherche = ''; montrer('liste'); chargerConvs(); chargerAdmin(); };
     chargerAdmin();
   }
 

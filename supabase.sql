@@ -1128,6 +1128,7 @@ grant execute on function public.crm_admin_prospects(), public.crm_admin_prospec
 -- Messagerie entre partenaires (2026-10-28) : les garages s'écrivent entre eux et avec les apporteurs d'affaires.
 -- Un participant est un garage (« g:<id de l'entreprise> », partagé par toute son équipe) ou un apporteur (« a:<email> »).
 -- Deux apporteurs ne peuvent pas s'écrire. La démo ne parle qu'à la démo.
+-- L'administrateur écrit au nom d'Ocaz (« o:ocaz ») à n'importe quel revendeur ou apporteur, et chacun peut écrire à Ocaz.
 -- Modération : le destinataire peut signaler un message ; l'administrateur ne voit que les messages signalés
 -- (avec la conversation autour) et peut bloquer l'envoi d'un participant. Il ne lit jamais les autres conversations.
 -- =====================================================================================================
@@ -1178,7 +1179,8 @@ create or replace function public.crm__msg_mes_cles() returns text[]
 language sql stable security definer set search_path = public as $$
   select array_remove(array[
     (select 'g:' || public.crm_entreprise()::text),
-    (select 'a:' || email from public.crm_apporteurs where email = lower(auth.jwt() ->> 'email') and statut = 'actif')], null);
+    (select 'a:' || email from public.crm_apporteurs where email = lower(auth.jwt() ->> 'email') and statut = 'actif'),
+    (select 'o:ocaz' where public.crm_est_superadmin())], null);
 $$;
 
 -- Infos d'un participant : nom, ligne de détail, démo, actif (null s'il n'existe pas).
@@ -1193,6 +1195,8 @@ begin
         'demo', en.demo, 'actif', true)
       into r from public.crm_entreprises en left join public.crm_reseau rs on rs.entreprise_id = en.id
       where en.id::text = substr(p_cle, 3);
+  elsif p_cle = 'o:ocaz' then
+    r := jsonb_build_object('cle', p_cle, 'type', 'ocaz', 'nom', 'Ocaz', 'sous', 'L''équipe Ocaz', 'demo', null, 'actif', true);
   elsif p_cle like 'a:%' then
     select jsonb_build_object('cle', p_cle, 'type', 'apporteur', 'nom', trim(concat_ws(' ', a.prenom, a.nom)),
         'sous', 'Apporteur d''affaires' || case when a.ville <> '' then ' · ' || a.ville else '' end,
@@ -1208,6 +1212,8 @@ language plpgsql stable security definer set search_path = public as $$
 declare a jsonb := public.crm__msg_participant(p_moi); b jsonb := public.crm__msg_participant(p_autre);
 begin
   if a is null or b is null or p_moi = p_autre then return false; end if;
+  -- Ocaz écrit à tout le monde (démo comprise) et tout le monde peut écrire à Ocaz.
+  if 'o:ocaz' in (p_moi, p_autre) then return (b ->> 'actif')::boolean; end if;
   if (a ->> 'demo')::boolean <> (b ->> 'demo')::boolean then return false; end if;
   if not (b ->> 'actif')::boolean then return false; end if;
   if a ->> 'type' = 'apporteur' and b ->> 'type' = 'apporteur' then return false; end if;
@@ -1238,9 +1244,19 @@ language plpgsql stable security definer set search_path = public as $$
 declare d boolean;
 begin
   perform public.crm__msg_verifier_moi(p_moi);
+  -- Ocaz : tous les revendeurs et tous les apporteurs actifs (démo comprise).
+  if p_moi = 'o:ocaz' then
+    return coalesce((select json_agg(p order by p ->> 'type' desc, (p ->> 'demo')::boolean, p ->> 'nom') from (
+      select public.crm__msg_participant('g:' || en.id::text) p from public.crm_entreprises en
+        where not exists (select 1 from public.crm_membres m join public.crm_superadmins s on s.email = m.email where m.entreprise_id = en.id)
+      union all
+      select public.crm__msg_participant('a:' || a.email) from public.crm_apporteurs a where a.statut = 'actif') x), '[]'::json);
+  end if;
   d := (public.crm__msg_participant(p_moi) ->> 'demo')::boolean;
-  return coalesce((select json_agg(p order by p ->> 'type' desc, p ->> 'nom') from (
-    select public.crm__msg_participant('g:' || en.id::text) p from public.crm_entreprises en
+  return coalesce((select json_agg(p order by p ->> 'type' = 'ocaz' desc, p ->> 'type' desc, p ->> 'nom') from (
+    select public.crm__msg_participant('o:ocaz') p
+    union all
+    select public.crm__msg_participant('g:' || en.id::text) from public.crm_entreprises en
       where en.demo = d and 'g:' || en.id::text <> p_moi
         and (p_moi like 'g:%' or exists (select 1 from public.crm_reseau r where r.entreprise_id = en.id and r.actif))
         and not exists (select 1 from public.crm_membres m join public.crm_superadmins s on s.email = m.email where m.entreprise_id = en.id)

@@ -52,3 +52,9 @@ dialog.msg .o-page { min-height: 0; }
 .msg-extrait .vise { border-left: 3px solid var(--danger); padding-left: 8px; font-weight: 600; }
 .chip.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .msg-outils .ap-loupe { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.msg-conv .avatar.msg-ocaz { background: #0d0f12; padding: 0; overflow: hidden; }
+.msg-conv .avatar.msg-ocaz img { width: 100%; height: 100%; display: block; }
+.msg-signalements { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px; text-align: left;
+  border-radius: 12px; padding: 11px 14px; font-weight: 600; color: var(--muted); background: var(--bg); }
+.msg-signalements.actif { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: color-mix(in srgb, var(--danger) 7%, var(--card)); }
+.msg-conv .badge { font-size: 10.5px; padding: 1px 7px; vertical-align: 1px; }
