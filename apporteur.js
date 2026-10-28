@@ -84,6 +84,7 @@
       ecouter();
       if (moi.statut === 'actif') Messagerie.demarrer({ client, moi: 'a:' + moi.email, bouton: $('#btn-msg') });
       afficher(onglet);
+      Annonces.afficher(client);
     } catch (err) {
       verrou(false);
       $('#vue').innerHTML = `<div class="empty"><strong>Connexion impossible</strong><span>${esc(err.message)}</span></div>`;
