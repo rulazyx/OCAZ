@@ -701,3 +701,6 @@ body[data-onglet="administratif"] #count, body[data-onglet="administratif"] #lis
 .annonce > div { flex: 1; min-width: 0; }
 .annonce p { margin: 3px 0 0; color: var(--text); }
 .annonce-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 4px; }
+
+/* Téléphone : appli allégée, sans Tableau de bord ni Commandes dans la barre du bas (voir SANS_TELEPHONE dans app.js). */
+body:not(.ap) #bottom-tabs [data-tab="donnees"], body:not(.ap) #bottom-tabs [data-tab="commandes"] { display: none; }

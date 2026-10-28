@@ -26,7 +26,7 @@ const Droits = (() => {
   // Masque les boutons d'onglets interdits ; renvoie vers le Tableau de bord si l'onglet ouvert disparaît.
   function appliquer() {
     document.querySelectorAll('[data-tab]').forEach(b => { b.hidden = !visible(b.dataset.tab); });
-    if (typeof onglet !== 'undefined' && !visible(onglet)) switchTab('donnees');
+    if (typeof onglet !== 'undefined' && !visible(onglet)) switchTab(typeof ongletAccueil === 'function' ? ongletAccueil() : 'donnees');
   }
 
   return { get, achat, depot, reseau, visible, appliquer };
