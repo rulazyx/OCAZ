@@ -272,6 +272,18 @@
   }
   // Mes étapes : la feuille de route d'Anthony (reprise du doc « Étapes »), modifiable ici.
   const STATUTS_ETAPE = { a_faire: ['À faire', 'b-grey'], en_cours: ['En cours', 'b-orange'], fait: ['Fait', 'b-green'], plus_tard: ['Plus tard', 'b-purple'] };
+  // Préparer la prospection (28/10) : avant d'aller voir les 5 premiers garages testeurs.
+  const PROSPECTION_ETAPES = [
+    ['8.1 Préparer une démo fiable', 'a_faire', 'Compte revendeur/test rempli avec photos, testé en 4G, et une capture vidéo de secours de 2 minutes.', 'pr1'],
+    ["8.2 Rédiger l'offre garage testeur", 'a_faire', 'Une demi-page à laisser : 2 mois gratuits, un point par semaine, puis 69,99 €/mois.', 'pr2'],
+    ['8.3 Répéter la démo', 'a_faire', 'Le parcours de démo en 5 minutes et les réponses aux objections.', 'pr3'],
+    ['8.4 Préparer les comptes la veille', 'a_faire', "Compte créé dans l'admin et stock Leboncoin importé avant la visite.", 'pr4'],
+    ['8.5 Organiser les tournées par zone', 'a_faire', '3 ou 4 garages par demi-journée, de 9 h 30 à 11 h ou de 14 h à 15 h 30.', 'pr5'],
+    ['8.6 Noter chaque visite le jour même', 'a_faire', "Dans l'onglet Prospection : étape, date de relance, remarques.", 'pr6'],
+    ['8.7 Tenir une fiche des retours testeurs', 'a_faire', "Ce qui plaît, ce qui manque, ce qui bloque, garage par garage.", 'pr7'],
+    ['8.8 Flyer et cartes de visite', 'a_faire', 'Flyer A5 avec QR code ocaz.re, et cartes de visite.', 'pr8'],
+    ['8.9 Réponse « vous êtes une vraie entreprise ? »', 'a_faire', "Préparer quoi dire tant que la micro-entreprise n'est pas encore créée.", 'pr9'],
+  ];
   const ETAPES_DEPART = [
     ['1. Valider le marché', 'en_cours', 'Sondage Google Forms en ligne, 60 marchands repérés. Analyser les réponses.'],
     ["2. Créer l'entreprise", 'plus_tard', 'Micro-entreprise Ocaz, après avoir rencontré les premiers pros (SIREN, compte bancaire, assurance RC pro, marque INPI).'],
@@ -282,11 +294,23 @@
     ['5. Pages légales du site', 'en_cours', 'Ajouter le SIREN une fois l\'entreprise créée. Faire relire le contrat apporteur par un juriste.'],
     ['6. Référencement Google', 'en_cours', 'Search Console fait. Suite : fiche Google Business et annuaires locaux.'],
     ["7. Paiement de l'abonnement", 'a_faire', '69,99 €/mois, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
-    ['8. Phase test : 5 garages partenaires', 'a_faire', "Démarcher les 60 marchands (onglet Prospection), d'abord ceux qui ont répondu au sondage, en commençant par GT Auto."],
+    ...PROSPECTION_ETAPES,
+    ['8. Phase test : 5 garages testeurs', 'a_faire', "Démarcher les 60 marchands (onglet Prospection), d'abord ceux qui ont répondu au sondage, en commençant par GT Auto. Puis viser 30."],
     ['9. 30 garages partenaires', 'a_faire', "Objectif avril 2027, environ 2 100 €/mois."],
     ['10. 100 garages partenaires', 'a_faire', 'Le réseau complet, environ 7 000 €/mois.'],
     ['11. Applis App Store et Google Play', 'plus_tard', 'Après les premiers clients : 99 €/an chez Apple, 25 € une fois chez Google.'],
-  ].map(([titre, statut, suite]) => ({ id: nouvelId(), titre, statut, suite }));
+  ].map(([titre, statut, suite, id]) => ({ id: id || nouvelId(), titre, statut, suite }));
+  // Étapes ajoutées après coup : elles rejoignent aussi une liste déjà enregistrée (une seule fois, avant la phase test).
+  function completerEtapes(v) {
+    const liste = v?.liste ? [...v.liste] : ETAPES_DEPART;
+    const nouvelles = PROSPECTION_ETAPES.filter(([, , , id]) => !liste.some(e => e.id === id) && !(v?.connues || []).includes(id))
+      .map(([titre, statut, suite, id]) => ({ id, titre, statut, suite }));
+    if (v?.liste && nouvelles.length) {
+      const i = liste.findIndex(e => /^8\. Phase test/.test(e.titre));
+      liste.splice(i < 0 ? liste.length : i, 0, ...nouvelles);
+    }
+    return liste;
+  }
   function blocEtapes() {
     const liste = etapes || [];
     const n = st => liste.filter(e => e.statut === st).length;
@@ -311,11 +335,11 @@
       titre: l.querySelector('[data-ee=titre]').value.trim(), statut: l.querySelector('[data-ee=statut]').value, suite: l.querySelector('[data-ee=suite]').value.trim() }));
   }
   async function enregistrerEtapes() {
-    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes } }); toast('Étapes enregistrées'); }
+    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes, connues: PROSPECTION_ETAPES.map(e => e[3]) } }); toast('Étapes enregistrées'); }
     catch (err) { toast(err.message); }
   }
   async function chargerTableau() {
-    if (!etapes) rpc('crm_admin_reglage_lire', { p_cle: 'etapes' }).then(v => { etapes = v?.liste || ETAPES_DEPART; if (onglet === 'tableau') afficher(); },
+    if (!etapes) rpc('crm_admin_reglage_lire', { p_cle: 'etapes' }).then(v => { etapes = completerEtapes(v); if (onglet === 'tableau') afficher(); },
       () => { etapes = ETAPES_DEPART; if (onglet === 'tableau') afficher(); });
     try { [tableau, prospects] = await Promise.all([rpc('crm_admin_tableau'), prospects ? prospects : rpc('crm_admin_prospects').catch(() => null)]); }
     catch (err) { toast(err.message); tableau = { garages: [], apporteurs: 0, leads_30j: 0, ventes_reseau_30j: 0 }; }
