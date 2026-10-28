@@ -284,6 +284,13 @@
     ['8.8 Flyer et cartes de visite', 'a_faire', 'Flyer A5 avec QR code ocaz.re, et cartes de visite.', 'pr8'],
     ['8.9 Réponse « vous êtes une vraie entreprise ? »', 'a_faire', "Préparer quoi dire tant que la micro-entreprise n'est pas encore créée.", 'pr9'],
   ];
+  // Vision à long terme (28/10), en fin de liste.
+  const VISION_ETAPES = [
+    ["Vision 1 · D'ici 2027 : Ocaz et sa commercialisation", 'en_cours', '100 garages partenaires (5 testeurs, puis 30). Ensuite le bouche-à-oreille fait grandir le réseau.', 'vi1'],
+    ['Vision 2 · Horizon 2028 : la cote des véhicules à La Réunion', 'plus_tard', "Un logiciel de cote type Autobiz pour La Réunion. Il permet de développer le site vitrine et d'ouvrir les annonces aux particuliers.", 'vi2'],
+    ['Vision 3 · Horizon 2029 : les concessionnaires', 'plus_tard', 'Un logiciel de reprise pour les concessionnaires, relié au logiciel de cote.', 'vi3'],
+  ];
+  const AJOUTS = [...PROSPECTION_ETAPES, ...VISION_ETAPES];
   const ETAPES_DEPART = [
     ['1. Valider le marché', 'en_cours', 'Sondage Google Forms en ligne, 60 marchands repérés. Analyser les réponses.'],
     ["2. Créer l'entreprise", 'plus_tard', 'Micro-entreprise Ocaz, après avoir rencontré les premiers pros (SIREN, compte bancaire, assurance RC pro, marque INPI).'],
@@ -299,16 +306,21 @@
     ['9. 30 garages partenaires', 'a_faire', "Objectif avril 2027, environ 2 100 €/mois."],
     ['10. 100 garages partenaires', 'a_faire', 'Le réseau complet, environ 7 000 €/mois.'],
     ['11. Applis App Store et Google Play', 'plus_tard', 'Après les premiers clients : 99 €/an chez Apple, 25 € une fois chez Google.'],
+    ...VISION_ETAPES,
   ].map(([titre, statut, suite, id]) => ({ id: id || nouvelId(), titre, statut, suite }));
-  // Étapes ajoutées après coup : elles rejoignent aussi une liste déjà enregistrée (une seule fois, avant la phase test).
+  // Étapes ajoutées après coup : elles rejoignent aussi une liste déjà enregistrée, une seule fois
+  // (la prospection avant la phase test, la vision à la fin).
   function completerEtapes(v) {
-    const liste = v?.liste ? [...v.liste] : ETAPES_DEPART;
-    const nouvelles = PROSPECTION_ETAPES.filter(([, , , id]) => !liste.some(e => e.id === id) && !(v?.connues || []).includes(id))
+    if (!v?.liste) return ETAPES_DEPART;
+    const liste = [...v.liste];
+    const nouvelles = groupe => groupe.filter(([, , , id]) => !liste.some(e => e.id === id) && !(v.connues || []).includes(id))
       .map(([titre, statut, suite, id]) => ({ id, titre, statut, suite }));
-    if (v?.liste && nouvelles.length) {
+    const pros = nouvelles(PROSPECTION_ETAPES);
+    if (pros.length) {
       const i = liste.findIndex(e => /^8\. Phase test/.test(e.titre));
-      liste.splice(i < 0 ? liste.length : i, 0, ...nouvelles);
+      liste.splice(i < 0 ? liste.length : i, 0, ...pros);
     }
+    liste.push(...nouvelles(VISION_ETAPES));
     return liste;
   }
   function blocEtapes() {
@@ -335,7 +347,7 @@
       titre: l.querySelector('[data-ee=titre]').value.trim(), statut: l.querySelector('[data-ee=statut]').value, suite: l.querySelector('[data-ee=suite]').value.trim() }));
   }
   async function enregistrerEtapes() {
-    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes, connues: PROSPECTION_ETAPES.map(e => e[3]) } }); toast('Étapes enregistrées'); }
+    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes, connues: AJOUTS.map(e => e[3]) } }); toast('Étapes enregistrées'); }
     catch (err) { toast(err.message); }
   }
   async function chargerTableau() {
