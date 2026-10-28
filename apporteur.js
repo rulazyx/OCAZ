@@ -313,7 +313,7 @@
           <button type="button" id="btn-contrat">Voir / imprimer mon contrat</button>`
         : `<p class="muted">Lis le contrat d'apporteur d'affaires du réseau Ocaz, puis signe-le en tapant ton prénom et ton nom.</p>
           <div class="ap-contrat" tabindex="0">${Commission.contratHtml()}</div>
-          <label class="check"><input type="checkbox" id="s-accepte"><span>J'ai lu le contrat et je l'accepte, ainsi que les <a href="https://ocaz.re/cgu" target="_blank">CGU</a> et la <a href="https://ocaz.re/confidentialite" target="_blank">politique de confidentialité</a>.</span></label>
+          <label class="check"><input type="checkbox" id="s-accepte"><span>J'ai lu le contrat et je l'accepte, ainsi que les <a href="https://reseau.ocaz.re/cgu" target="_blank">CGU</a> et la <a href="https://reseau.ocaz.re/confidentialite" target="_blank">politique de confidentialité</a>.</span></label>
           <label class="check"><input type="checkbox" id="s-certifie"><span>Je déclarerai moi-même mes commissions (URSSAF, impôts).</span></label>
           <div class="field"><label for="s-signature">Signature : prénom et nom</label><input id="s-signature" autocomplete="name"></div>
           <div class="p-actions"><span class="spacer"></span><button type="button" id="btn-signer" class="primary">Signer le contrat</button></div>`}

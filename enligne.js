@@ -1,5 +1,5 @@
 // Vitrine en ligne (côté garage) : l'appli publie une copie des véhicules disponibles, sans prix d'achat ni
-// données clients, sur une page publique (ocaz.re/vitrine?g=adresse). Les demandes des visiteurs arrivent ici en direct.
+// données clients, sur une page publique (reseau.ocaz.re/vitrine?g=adresse). Les demandes des visiteurs arrivent ici en direct.
 const EnLigne = (() => {
   const VISIBLES = ['En stock', 'Réservé'];
   let timer = null;
@@ -9,8 +9,8 @@ const EnLigne = (() => {
 
   const reglages = () => Param.get().vitrine;
   const slugDe = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  // Les vitrines sont publiques sur le site ocaz.re ; l'appli pro est à part (pro.ocaz.re).
-  const dossier = () => 'https://ocaz.re/';
+  // Les vitrines sont publiques sur le site reseau.ocaz.re ; l'appli pro est sur ocaz.re.
+  const dossier = () => 'https://reseau.ocaz.re/';
   const lien = slug => dossier() + 'vitrine?g=' + encodeURIComponent(slug);
   const codeIntegre = slug => `<script src="${dossier()}integrer.js" data-garage="${slug}" async></script>`;
 

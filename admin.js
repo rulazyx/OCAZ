@@ -199,7 +199,7 @@
           <div class="adm-compte"><span>Contrat<small>${a.contrat_signe_le ? `Signé le ${dateFr(a.contrat_signe_le)} (« ${esc(a.signature)} »)` : "Pas encore signé : il le signe dans son espace, à sa première connexion."}</small></span></div>
           <div class="adm-compte"><span>Mot de passe<small>${a.doit_changer_mdp ? 'Mot de passe de départ (12345678)' : 'Choisi par l\'apporteur'}</small></span>
             ${a.demo ? '' : `<button type="button" class="chip" data-reinit="${esc(a.email)}">Réinit. mdp</button>`}</div></div>`
-        : '<p class="adm-info">Il se connecte sur pro.ocaz.re avec cet email et le mot de passe <b>12345678</b>, choisit le sien, puis signe son contrat d\'apporteur en ligne.</p>'}`;
+        : '<p class="adm-info">Il se connecte sur ocaz.re avec cet email et le mot de passe <b>12345678</b>, choisit le sien, puis signe son contrat d\'apporteur en ligne.</p>'}`;
     $('#dlg-app').showModal();
   }
   async function enregistrerApporteur() {
