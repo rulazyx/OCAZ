@@ -44,3 +44,21 @@
 .adm-table tbody tr:last-child td { border-bottom: 0; }
 body.admin #bottom-tabs button .ico { padding: 4px 8px; width: 40px; }
 .adm-publier { display: flex; justify-content: flex-end; }
+.adm-paliers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .adm-paliers { grid-template-columns: 1fr; } }
+.adm-palier { display: grid; gap: 6px; opacity: .55; }
+.adm-palier.encours, .adm-palier.fait { opacity: 1; }
+.adm-palier span small { display: block; color: var(--muted); font-size: 12px; }
+.adm-palier.fait b { color: var(--green); }
+.adm-sous-tete { margin-top: 18px; }
+.adm-sous-tete .section { margin: 0; }
+.adm-etapes tbody tr { cursor: default; }
+.adm-etapes td { white-space: normal; vertical-align: top; }
+.adm-etapes td:first-child { min-width: 170px; }
+.adm-etapes td:last-child { min-width: 260px; color: var(--muted); }
+.adm-etapes tr.st-fait td:first-child b { text-decoration: line-through; opacity: .6; }
+.adm-etapes select.badge { border: 0; padding: 3px 8px; font-weight: 600; width: auto; cursor: pointer; }
+.adm-etape-edit { display: grid; grid-template-columns: minmax(0, 1fr) 130px minmax(0, 2fr) auto; gap: 8px; align-items: start; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .adm-etape-edit { grid-template-columns: 1fr 120px; } .adm-etape-edit textarea { grid-column: 1 / -1; } }
+body.admin header #tabs button { white-space: nowrap; padding: 8px 11px; }
+@media (min-width: 900px) and (max-width: 1240px) { body.admin header #tabs button span { display: none; } }
