@@ -945,3 +945,260 @@ revoke execute on function public.crm_admin_revendeurs(), public.crm_admin_reven
 grant execute on function public.crm_admin_revendeurs(), public.crm_admin_revendeur_enregistrer(uuid, text, jsonb), public.crm_admin_compte_retirer(text),
   public.crm_admin_apporteur_enregistrer(text, jsonb, boolean), public.crm_apporteurs_liste(), public.crm_apporteur_maj(jsonb),
   public.crm_apporteur_signer(text, text), public.crm_apporteur_mdp_change(), public.crm_reinit_mdp(text), public.crm_reseau_partenaires() to authenticated;
+
+-- =====================================================================================================
+-- Messagerie entre partenaires (2026-10-28) : les garages s'écrivent entre eux et avec les apporteurs d'affaires.
+-- Un participant est un garage (« g:<id de l'entreprise> », partagé par toute son équipe) ou un apporteur (« a:<email> »).
+-- Deux apporteurs ne peuvent pas s'écrire. La démo ne parle qu'à la démo.
+-- Modération : le destinataire peut signaler un message ; l'administrateur ne voit que les messages signalés
+-- (avec la conversation autour) et peut bloquer l'envoi d'un participant. Il ne lit jamais les autres conversations.
+-- =====================================================================================================
+
+create table if not exists public.crm_conversations (
+  id uuid primary key default gen_random_uuid(),
+  cle_a text not null,
+  cle_b text not null,
+  cree_le timestamptz not null default now(),
+  dernier_le timestamptz not null default now(),
+  dernier_texte text not null default '',
+  lu_a timestamptz not null default 'epoch',
+  lu_b timestamptz not null default 'epoch',
+  constraint crm_conversations_ordre check (cle_a < cle_b),
+  constraint crm_conversations_paire unique (cle_a, cle_b)
+);
+create index if not exists crm_conversations_b on public.crm_conversations (cle_b);
+
+create table if not exists public.crm_messages (
+  id bigint generated always as identity primary key,
+  conversation_id uuid not null references public.crm_conversations (id) on delete cascade,
+  auteur_cle text not null,
+  auteur_email text not null,
+  texte text not null,
+  contexte text not null default '',
+  cree_le timestamptz not null default now(),
+  signale_le timestamptz,
+  signale_par text not null default '',
+  signale_motif text not null default '',
+  traite boolean not null default false
+);
+create index if not exists crm_messages_conv on public.crm_messages (conversation_id, id desc);
+create index if not exists crm_messages_auteur on public.crm_messages (auteur_email, cree_le desc);
+create index if not exists crm_messages_signales on public.crm_messages (signale_le) where signale_le is not null and not traite;
+
+-- Participants bloqués par l'administrateur : ils lisent encore leurs messages mais ne peuvent plus en envoyer.
+create table if not exists public.crm_msg_bloques (
+  cle text primary key,
+  motif text not null default '',
+  bloque_le timestamptz not null default now()
+);
+alter table public.crm_conversations enable row level security;
+alter table public.crm_messages enable row level security;
+alter table public.crm_msg_bloques enable row level security;
+
+-- Identités de messagerie du compte connecté (son garage et/ou son espace apporteur actif).
+create or replace function public.crm__msg_mes_cles() returns text[]
+language sql stable security definer set search_path = public as $$
+  select array_remove(array[
+    (select 'g:' || public.crm_entreprise()::text),
+    (select 'a:' || email from public.crm_apporteurs where email = lower(auth.jwt() ->> 'email') and statut = 'actif')], null);
+$$;
+
+-- Infos d'un participant : nom, ligne de détail, démo, actif (null s'il n'existe pas).
+create or replace function public.crm__msg_participant(p_cle text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if p_cle like 'g:%' then
+    select jsonb_build_object('cle', p_cle, 'type', 'garage',
+        'nom', coalesce(nullif(rs.data -> 'garage' ->> 'nom', ''), nullif(en.config -> 'infos' ->> 'nom', ''), en.nom),
+        'sous', coalesce(nullif(rs.data -> 'garage' ->> 'ville', ''), nullif(en.config -> 'infos' ->> 'ville', ''), 'Garage'),
+        'demo', en.demo, 'actif', true)
+      into r from public.crm_entreprises en left join public.crm_reseau rs on rs.entreprise_id = en.id
+      where en.id::text = substr(p_cle, 3);
+  elsif p_cle like 'a:%' then
+    select jsonb_build_object('cle', p_cle, 'type', 'apporteur', 'nom', trim(concat_ws(' ', a.prenom, a.nom)),
+        'sous', 'Apporteur d''affaires' || case when a.ville <> '' then ' · ' || a.ville else '' end,
+        'demo', a.demo, 'actif', a.statut = 'actif')
+      into r from public.crm_apporteurs a where a.email = substr(p_cle, 3);
+  end if;
+  return r;
+end $$;
+
+-- Règle de qui peut écrire à qui (changer ici si besoin).
+create or replace function public.crm__msg_autorise(p_moi text, p_autre text) returns boolean
+language plpgsql stable security definer set search_path = public as $$
+declare a jsonb := public.crm__msg_participant(p_moi); b jsonb := public.crm__msg_participant(p_autre);
+begin
+  if a is null or b is null or p_moi = p_autre then return false; end if;
+  if (a ->> 'demo')::boolean <> (b ->> 'demo')::boolean then return false; end if;
+  if not (b ->> 'actif')::boolean then return false; end if;
+  if a ->> 'type' = 'apporteur' and b ->> 'type' = 'apporteur' then return false; end if;
+  return true;
+end $$;
+
+create or replace function public.crm__msg_verifier_moi(p_moi text) returns void
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if p_moi is null or not (p_moi = any (public.crm__msg_mes_cles())) then raise exception 'Messagerie indisponible pour ce compte.'; end if;
+end $$;
+
+-- Lecture directe (temps réel) : seulement les conversations dont on fait partie.
+drop policy if exists "Messagerie : mes conversations" on public.crm_conversations;
+create policy "Messagerie : mes conversations" on public.crm_conversations for select to authenticated
+  using (cle_a = any (public.crm__msg_mes_cles()) or cle_b = any (public.crm__msg_mes_cles()));
+drop policy if exists "Messagerie : mes messages" on public.crm_messages;
+create policy "Messagerie : mes messages" on public.crm_messages for select to authenticated
+  using (exists (select 1 from public.crm_conversations c where c.id = conversation_id
+    and (c.cle_a = any (public.crm__msg_mes_cles()) or c.cle_b = any (public.crm__msg_mes_cles()))));
+do $$ begin
+  alter publication supabase_realtime add table public.crm_messages;
+exception when duplicate_object or undefined_object then null; end $$;
+
+-- Annuaire : à qui je peux écrire. Garage : les autres garages et les apporteurs. Apporteur : les garages du réseau.
+create or replace function public.crm_msg_contacts(p_moi text) returns json
+language plpgsql stable security definer set search_path = public as $$
+declare d boolean;
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  d := (public.crm__msg_participant(p_moi) ->> 'demo')::boolean;
+  return coalesce((select json_agg(p order by p ->> 'type' desc, p ->> 'nom') from (
+    select public.crm__msg_participant('g:' || en.id::text) p from public.crm_entreprises en
+      where en.demo = d and 'g:' || en.id::text <> p_moi
+        and (p_moi like 'g:%' or exists (select 1 from public.crm_reseau r where r.entreprise_id = en.id and r.actif))
+        and not exists (select 1 from public.crm_membres m join public.crm_superadmins s on s.email = m.email where m.entreprise_id = en.id)
+    union all
+    select public.crm__msg_participant('a:' || a.email) from public.crm_apporteurs a
+      where p_moi like 'g:%' and a.demo = d and a.statut = 'actif') x), '[]'::json);
+end $$;
+
+-- Mes conversations, la plus récente d'abord, avec le nombre de messages non lus.
+create or replace function public.crm_msg_conversations(p_moi text) returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  return coalesce((select json_agg(json_build_object('id', c.id, 'dernier_le', c.dernier_le, 'dernier_texte', c.dernier_texte,
+      'autre', public.crm__msg_participant(case when c.cle_a = p_moi then c.cle_b else c.cle_a end),
+      'non_lus', (select count(*) from public.crm_messages m where m.conversation_id = c.id and m.auteur_cle <> p_moi
+        and m.cree_le > case when c.cle_a = p_moi then c.lu_a else c.lu_b end)) order by c.dernier_le desc)
+    from public.crm_conversations c where p_moi in (c.cle_a, c.cle_b)), '[]'::json);
+end $$;
+
+-- Ouvre (ou crée) la conversation avec un partenaire.
+create or replace function public.crm_msg_ouvrir(p_moi text, p_autre text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare x text := least(p_moi, p_autre); y text := greatest(p_moi, p_autre); cid uuid;
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  select id into cid from public.crm_conversations where cle_a = x and cle_b = y;
+  if cid is not null then return cid; end if;
+  if not public.crm__msg_autorise(p_moi, p_autre) then raise exception 'Tu ne peux pas écrire à ce partenaire.'; end if;
+  insert into public.crm_conversations (cle_a, cle_b) values (x, y)
+    on conflict on constraint crm_conversations_paire do update set cle_a = excluded.cle_a returning id into cid;
+  return cid;
+end $$;
+
+-- Messages d'une conversation (les 50 plus récents, ou ceux avant p_avant), et marque la conversation lue.
+create or replace function public.crm_msg_lire(p_conv uuid, p_moi text, p_avant bigint default null) returns json
+language plpgsql security definer set search_path = public as $$
+declare c public.crm_conversations%rowtype;
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  select * into c from public.crm_conversations where id = p_conv and p_moi in (cle_a, cle_b);
+  if c.id is null then raise exception 'Conversation introuvable.'; end if;
+  if p_avant is null then
+    update public.crm_conversations set lu_a = case when cle_a = p_moi then now() else lu_a end,
+      lu_b = case when cle_b = p_moi then now() else lu_b end where id = p_conv;
+  end if;
+  return json_build_object('id', c.id,
+    'autre', public.crm__msg_participant(case when c.cle_a = p_moi then c.cle_b else c.cle_a end),
+    'lu_autre', case when c.cle_a = p_moi then c.lu_b else c.lu_a end,
+    'bloque', exists (select 1 from public.crm_msg_bloques where cle = p_moi),
+    'messages', coalesce((select json_agg(json_build_object('id', m.id, 'moi', m.auteur_cle = p_moi, 'texte', m.texte, 'contexte', m.contexte,
+        'cree_le', m.cree_le, 'signale', m.signale_le is not null and m.auteur_cle <> p_moi) order by m.id)
+      from (select * from public.crm_messages where conversation_id = p_conv and (p_avant is null or id < p_avant) order by id desc limit 50) m), '[]'::json));
+end $$;
+
+create or replace function public.crm_msg_envoyer(p_conv uuid, p_moi text, p_texte text, p_contexte text default '') returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  e text := lower(auth.jwt() ->> 'email');
+  c public.crm_conversations%rowtype;
+  t text := trim(coalesce(p_texte, ''));
+  m public.crm_messages%rowtype;
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  select * into c from public.crm_conversations where id = p_conv and p_moi in (cle_a, cle_b);
+  if c.id is null then raise exception 'Conversation introuvable.'; end if;
+  if exists (select 1 from public.crm_msg_bloques where cle = p_moi) then
+    raise exception 'Ta messagerie a été suspendue par Ocaz. Contacte contact@ocaz.re.';
+  end if;
+  if not public.crm__msg_autorise(p_moi, case when c.cle_a = p_moi then c.cle_b else c.cle_a end) then
+    raise exception 'Ce partenaire ne peut plus recevoir de messages.';
+  end if;
+  if length(t) = 0 then raise exception 'Message vide.'; end if;
+  if length(t) > 2000 then raise exception 'Message trop long (2000 caractères maximum).'; end if;
+  if (select count(*) from public.crm_messages where auteur_email = e and cree_le > now() - interval '10 minutes') >= 60 then
+    raise exception 'Trop de messages d''affilée : attends quelques minutes.';
+  end if;
+  insert into public.crm_messages (conversation_id, auteur_cle, auteur_email, texte, contexte)
+    values (p_conv, p_moi, e, t, left(trim(coalesce(p_contexte, '')), 200)) returning * into m;
+  update public.crm_conversations set dernier_le = m.cree_le, dernier_texte = left(t, 140),
+    lu_a = case when cle_a = p_moi then m.cree_le else lu_a end, lu_b = case when cle_b = p_moi then m.cree_le else lu_b end
+    where id = p_conv;
+  return json_build_object('id', m.id, 'moi', true, 'texte', m.texte, 'contexte', m.contexte, 'cree_le', m.cree_le, 'signale', false);
+end $$;
+
+-- Le destinataire signale un message à l'administrateur.
+create or replace function public.crm_msg_signaler(p_id bigint, p_moi text, p_motif text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.crm__msg_verifier_moi(p_moi);
+  update public.crm_messages m set signale_le = now(), signale_par = p_moi, signale_motif = left(trim(coalesce(p_motif, '')), 300), traite = false
+    from public.crm_conversations c
+    where m.id = p_id and c.id = m.conversation_id and p_moi in (c.cle_a, c.cle_b) and m.auteur_cle <> p_moi;
+  if not found then raise exception 'Message introuvable.'; end if;
+end $$;
+
+-- Administrateur : messages signalés à traiter (avec les messages autour), et participants bloqués.
+create or replace function public.crm_msg_admin() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return json_build_object(
+    'signalements', coalesce((select json_agg(json_build_object('id', m.id, 'texte', m.texte, 'cree_le', m.cree_le,
+        'signale_le', m.signale_le, 'motif', m.signale_motif, 'auteur', public.crm__msg_participant(m.auteur_cle),
+        'par', public.crm__msg_participant(m.signale_par), 'auteur_bloque', exists (select 1 from public.crm_msg_bloques b where b.cle = m.auteur_cle),
+        'autour', (select json_agg(json_build_object('id', x.id, 'texte', x.texte, 'cree_le', x.cree_le,
+            'auteur', public.crm__msg_participant(x.auteur_cle) ->> 'nom') order by x.id)
+          from (select * from public.crm_messages y where y.conversation_id = m.conversation_id order by abs(y.id - m.id) limit 11) x)) order by m.signale_le)
+      from public.crm_messages m where m.signale_le is not null and not m.traite), '[]'::json),
+    'bloques', coalesce((select json_agg(public.crm__msg_participant(b.cle) || jsonb_build_object('cle', b.cle, 'motif', b.motif, 'bloque_le', b.bloque_le)
+        order by b.bloque_le desc) from public.crm_msg_bloques b), '[]'::json));
+end $$;
+
+-- Administrateur : classe un signalement (« ignorer ») ou bloque l'auteur (« bloquer »), ou débloque un participant.
+create or replace function public.crm_msg_admin_traiter(p_id bigint, p_action text, p_cle text default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare m public.crm_messages%rowtype;
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if p_action = 'debloquer' then delete from public.crm_msg_bloques where cle = p_cle; return; end if;
+  select * into m from public.crm_messages where id = p_id;
+  if m.id is null then raise exception 'Message introuvable.'; end if;
+  if p_action = 'bloquer' then
+    insert into public.crm_msg_bloques (cle, motif) values (m.auteur_cle, left('Message signalé : ' || m.signale_motif, 300))
+      on conflict (cle) do nothing;
+  elsif p_action <> 'ignorer' then raise exception 'Action inconnue.';
+  end if;
+  update public.crm_messages set traite = true where id = p_id;
+end $$;
+
+revoke execute on function public.crm__msg_mes_cles(), public.crm__msg_participant(text), public.crm__msg_autorise(text, text),
+  public.crm__msg_verifier_moi(text) from public, anon;
+grant execute on function public.crm__msg_mes_cles() to authenticated; -- utilisée par les règles de lecture
+revoke execute on function public.crm_msg_contacts(text), public.crm_msg_conversations(text), public.crm_msg_ouvrir(text, text),
+  public.crm_msg_lire(uuid, text, bigint), public.crm_msg_envoyer(uuid, text, text, text), public.crm_msg_signaler(bigint, text, text),
+  public.crm_msg_admin(), public.crm_msg_admin_traiter(bigint, text, text) from public, anon;
+grant execute on function public.crm_msg_contacts(text), public.crm_msg_conversations(text), public.crm_msg_ouvrir(text, text),
+  public.crm_msg_lire(uuid, text, bigint), public.crm_msg_envoyer(uuid, text, text, text), public.crm_msg_signaler(bigint, text, text),
+  public.crm_msg_admin(), public.crm_msg_admin_traiter(bigint, text, text) to authenticated;

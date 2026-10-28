@@ -993,7 +993,8 @@ function afficherSync(status, user, role) {
   if (role) etaitConnecte = true;
   if (status === 'ok') {
     // Vitrine en ligne : demandes des visiteurs en direct, et copie publique remise à jour.
-    if (!vitrineDemarree) { vitrineDemarree = true; EnLigne.demarrer(); Reseau.demarrer(); } else { EnLigne.planifier(); Reseau.planifier(); }
+    if (!vitrineDemarree) { vitrineDemarree = true; EnLigne.demarrer(); Reseau.demarrer(); }
+    if (Sync.entreprise?.id) Messagerie.demarrer({ client: Sync.client, moi: 'g:' + Sync.entreprise.id, bouton: $('#btn-msg') }); else { EnLigne.planifier(); Reseau.planifier(); }
     // Nom de l'entreprise donné à la création du compte : repris dans les infos du garage.
     if (Sync.entreprise?.nom && !Param.get().garage.nom) Param.save({ garage: { ...Param.get().garage, nom: Sync.entreprise.nom } });
     // Compte démo vide : on le remplit avec des données d'exemple.
@@ -1004,7 +1005,7 @@ function afficherSync(status, user, role) {
     if (onglet === 'donnees') render();
   }
   // Déconnexion : les données quittent l'appareil (elles restent en ligne).
-  if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); db.vider(); switchTab('donnees'); }
+  if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); Messagerie.arreter(); db.vider(); switchTab('donnees'); }
   afficherAuth(status, user, role);
   if (!['connexion', 'envoi'].includes(status)) chargement(false);
 }
