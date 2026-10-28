@@ -1396,3 +1396,30 @@ revoke execute on function public.crm_msg_contacts(text), public.crm_msg_convers
 grant execute on function public.crm_msg_contacts(text), public.crm_msg_conversations(text), public.crm_msg_ouvrir(text, text),
   public.crm_msg_lire(uuid, text, bigint), public.crm_msg_envoyer(uuid, text, text, text), public.crm_msg_signaler(bigint, text, text),
   public.crm_msg_admin(), public.crm_msg_admin_traiter(bigint, text, text) to authenticated;
+
+-- Réglages de l'administrateur (par exemple ses étapes affichées sur le tableau de bord).
+create table if not exists public.crm_admin_reglages (
+  cle text primary key,
+  valeur jsonb not null default '{}'::jsonb,
+  maj_le timestamptz not null default now()
+);
+alter table public.crm_admin_reglages enable row level security;
+
+create or replace function public.crm_admin_reglage_lire(p_cle text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return (select valeur from public.crm_admin_reglages where cle = p_cle);
+end $$;
+
+create or replace function public.crm_admin_reglage_ecrire(p_cle text, p_valeur jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if length(coalesce(p_valeur, '{}'::jsonb)::text) > 50000 then raise exception 'Trop long.'; end if;
+  insert into public.crm_admin_reglages (cle, valeur, maj_le) values (left(p_cle, 60), coalesce(p_valeur, '{}'::jsonb), now())
+  on conflict (cle) do update set valeur = excluded.valeur, maj_le = now();
+end $$;
+
+revoke execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) from public, anon;
+grant execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) to authenticated;

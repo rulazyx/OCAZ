@@ -21,6 +21,17 @@
   const auj = () => new Date().toISOString().slice(0, 10);
   const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
   const OBJECTIF = 30, CAP = 100; // 30 abonnés d'ici avril 2027, puis une centaine de garages partenaires
+  // Paliers du nombre de garages partenaires : 5 pour la phase test, 30 d'ici avril 2027, puis 100.
+  const PALIERS = [[5, 'Phase test'], [OBJECTIF, 'Avril 2027'], [CAP, 'Le réseau complet']];
+  const palierSuivant = n => PALIERS.find(([v]) => n < v) || PALIERS[PALIERS.length - 1];
+  function paliers(n) {
+    return `<div class="adm-paliers">${PALIERS.map(([v, l], i) => {
+      const bas = i ? PALIERS[i - 1][0] : 0, fait = n >= v, encours = !fait && n >= bas;
+      return `<div class="adm-palier${fait ? ' fait' : encours ? ' encours' : ''}">
+        <span><b>${fait ? '✓ ' : ''}${v} partenaires</b><small>${l}${encours ? ` · ${n} / ${v}` : ''}</small></span>
+        <div class="adm-barre"><span style="width:${fait ? 100 : encours ? Math.round((n - bas) / (v - bas) * 100) : 0}%"></span></div></div>`;
+    }).join('')}</div>`;
+  }
   const jours = d => Math.round((new Date(d + 'T12:00:00') - new Date(auj() + 'T12:00:00')) / 864e5);
   // Prochain prélèvement : fin de l'essai, puis le même jour chaque mois.
   function prochainPaiement(debut) {
@@ -38,6 +49,7 @@
   let onglet = 'tableau', vue = 'revendeurs', q = '', filtreAbo = 'tous', filtrePro = 'encours', filtreLead = 'tous';
   let tableau = null, prospects = null, leads = null, annonces = null; // chargés à l'ouverture de leur onglet
   let pro = null; // fiche prospect ouverte
+  let etapes = null, editionEtapes = false, etapesAvant = null; // mes étapes (tableau de bord)
   let rev = null, app = null; // fiches ouvertes
 
   function toast(msg) {
@@ -190,8 +202,7 @@
         <div class="kpi"><span class="kpi-l">Revenu à ${CAP} garages</span><span class="kpi-v">${eur(CAP * PRIX)}</span><span class="kpi-s">par mois, ${eur(CAP * PRIX * 12)} par an</span></div>
       </div>
       <div class="adm-bloc adm-objectifs">
-        <div><span>Objectif ${OBJECTIF} abonnés (avril 2027) : <b>${actifs} / ${OBJECTIF}</b></span>${barre(actifs, OBJECTIF)}</div>
-        <div><span>Cap des ${CAP} garages partenaires : <b>${partenaires} / ${CAP}</b> <small class="hint">(abonnés, essais, impayés et offerts)</small></span>${barre(partenaires, CAP)}</div>
+        <div><span>Garages partenaires : <b>${partenaires}</b> <small class="hint">(abonnés, essais, impayés et offerts)</small></span>${paliers(partenaires)}</div>
       </div>
       ${urgents.length ? `<h3 class="section">À traiter (${urgents.length})</h3><div class="adm-bloc adm-abo-liste">${urgents.map(ligneAbo).join('')}</div>` : ''}
       <h3 class="section">Tous les revendeurs</h3>
@@ -239,15 +250,16 @@
     $('#vue').innerHTML = `<div class="ap-page">
       <div class="adm-tete"><h2>Tableau de bord</h2><button type="button" id="btn-actualiser">Actualiser</button></div>
       <div class="kpis">
-        ${kpi('Garages partenaires', partenaires.length, `${actifs} abonné(s) · objectif ${CAP}`)}
+        ${kpi('Garages partenaires', partenaires.length, `${actifs} abonné(s) · prochain palier ${palierSuivant(partenaires.length)[0]}`)}
         ${kpi('Revenu mensuel', eur(actifs * PRIX), `${eur(CAP * PRIX)} à ${CAP} garages`)}
         ${kpi('Leads (30 jours)', tableau.leads_30j, `${tableau.ventes_reseau_30j} vente(s) grâce au réseau`)}
         ${kpi('Apporteurs actifs', tableau.apporteurs, 'qui envoient des clients')}
       </div>
       <div class="adm-bloc adm-objectifs">
-        <div><span>Vers les ${CAP} garages partenaires : <b>${partenaires.length} / ${CAP}</b></span>${barre(partenaires.length, CAP)}</div>
+        <div><span>Garages partenaires : <b>${partenaires.length}</b></span>${paliers(partenaires.length)}</div>
         ${signes != null ? `<div><span>Prospection : <b>${signes}</b> signé(s) sur ${prospects.length} garage(s) démarché(s)</span>${barre(signes, Math.max(prospects.length, 1))}</div>` : ''}
       </div>
+      ${blocEtapes()}
       ${endormis.length || attente.length ? `<h3 class="section">À surveiller</h3><div class="adm-bloc">
         ${endormis.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>Pas connecté depuis ${joursDepuis(g.derniere_connexion) === Infinity ? 'le début' : joursDepuis(g.derniere_connexion) + ' jours'} : appelle-le avant qu'il résilie.</small></span></div>`).join('')}
         ${attente.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>${g.leads_attente} lead(s) pas encore pris en charge.</small></span></div>`).join('')}
@@ -258,7 +270,53 @@
         <tbody>${tableau.garages.map(ligne).join('') || '<tr><td colspan="7">Aucun garage.</td></tr>'}</tbody></table></div>
     </div>`;
   }
+  // Mes étapes : la feuille de route d'Anthony (reprise du doc « Étapes »), modifiable ici.
+  const STATUTS_ETAPE = { a_faire: ['À faire', 'b-grey'], en_cours: ['En cours', 'b-orange'], fait: ['Fait', 'b-green'], plus_tard: ['Plus tard', 'b-purple'] };
+  const ETAPES_DEPART = [
+    ['1. Valider le marché', 'en_cours', 'Sondage Google Forms en ligne, 60 marchands repérés. Analyser les réponses.'],
+    ["2. Créer l'entreprise", 'plus_tard', 'Micro-entreprise Ocaz, après avoir rencontré les premiers pros (SIREN, compte bancaire, assurance RC pro, marque INPI).'],
+    ["3. Construire l'appli", 'en_cours', 'Appli pro sur ocaz.re : stock, reprises, dépôt-vente, commandes, administratif, réseau, apporteurs, messagerie, admin.'],
+    ["3 bis. Vérifier l'appli", 'en_cours', "Tout vérifier onglet par onglet avec chaque identifiant (admin, revendeur, apporteur) : onglet Vérifications du doc Étapes."],
+    ['3 ter. Recherche par plaque', 'en_cours', 'Créer le compte immatriculationapi.com et suivre le guide « Activer la recherche par plaque ».'],
+    ['4. Domaine et mail', 'fait', 'ocaz.re = appli pro, reseau.ocaz.re = site public, contact@ocaz.re et signature mail prêts.'],
+    ['5. Pages légales du site', 'en_cours', 'Ajouter le SIREN une fois l\'entreprise créée. Faire relire le contrat apporteur par un juriste.'],
+    ['6. Référencement Google', 'en_cours', 'Search Console fait. Suite : fiche Google Business et annuaires locaux.'],
+    ["7. Paiement de l'abonnement", 'a_faire', '69,99 €/mois, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
+    ['8. Phase test : 5 garages partenaires', 'a_faire', "Démarcher les 60 marchands (onglet Prospection), d'abord ceux qui ont répondu au sondage, en commençant par GT Auto."],
+    ['9. 30 garages partenaires', 'a_faire', "Objectif avril 2027, environ 2 100 €/mois."],
+    ['10. 100 garages partenaires', 'a_faire', 'Le réseau complet, environ 7 000 €/mois.'],
+    ['11. Applis App Store et Google Play', 'plus_tard', 'Après les premiers clients : 99 €/an chez Apple, 25 € une fois chez Google.'],
+  ].map(([titre, statut, suite]) => ({ id: nouvelId(), titre, statut, suite }));
+  function blocEtapes() {
+    const liste = etapes || [];
+    const n = st => liste.filter(e => e.statut === st).length;
+    if (editionEtapes) return `<div class="adm-tete adm-sous-tete"><h3 class="section">Mes étapes</h3><span class="chips">
+        <button type="button" class="chip" id="etapes-annuler">Annuler</button><button type="button" class="chip active" id="etapes-ok">Enregistrer</button></span></div>
+      <div class="adm-bloc" id="etapes-edition">${liste.map((e, i) => `<div class="adm-etape-edit" data-etape-i="${i}">
+          <input data-ee="titre" value="${esc(e.titre)}" placeholder="Étape" aria-label="Étape">
+          <select data-ee="statut" aria-label="Statut">${Object.entries(STATUTS_ETAPE).map(([k, [l]]) => `<option value="${k}"${e.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+          <textarea data-ee="suite" rows="2" placeholder="Prochain pas" aria-label="Prochain pas">${esc(e.suite)}</textarea>
+          <span class="chips"><button type="button" class="chip" data-etape-monter="${i}" aria-label="Monter">↑</button><button type="button" class="chip" data-etape-suppr="${i}" aria-label="Supprimer l'étape">✕</button></span></div>`).join('')}
+        <button type="button" id="etape-ajouter">+ Ajouter une étape</button></div>`;
+    return `<div class="adm-tete adm-sous-tete"><h3 class="section">Mes étapes <small class="hint">${n('fait')} faite(s) sur ${liste.length} · ${n('en_cours')} en cours</small></h3>
+        <button type="button" class="chip" id="etapes-modifier">Modifier</button></div>
+      <div class="adm-table-scroll"><table class="adm-table adm-etapes">
+        <thead><tr><th>Étape</th><th>Statut</th><th>Prochain pas</th></tr></thead>
+        <tbody>${liste.map(e => `<tr class="st-${e.statut}"><td><b>${esc(e.titre)}</b></td>
+          <td><select data-etape-statut="${esc(e.id)}" class="badge ${STATUTS_ETAPE[e.statut]?.[1] || 'b-grey'}" aria-label="Statut de ${esc(e.titre)}">${Object.entries(STATUTS_ETAPE).map(([k, [l]]) => `<option value="${k}"${e.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
+          <td>${esc(e.suite)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  function lireEtapes() {
+    etapes = [...document.querySelectorAll('#etapes-edition [data-etape-i]')].map(l => ({ ...etapes[Number(l.dataset.etapeI)],
+      titre: l.querySelector('[data-ee=titre]').value.trim(), statut: l.querySelector('[data-ee=statut]').value, suite: l.querySelector('[data-ee=suite]').value.trim() }));
+  }
+  async function enregistrerEtapes() {
+    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes } }); toast('Étapes enregistrées'); }
+    catch (err) { toast(err.message); }
+  }
   async function chargerTableau() {
+    if (!etapes) rpc('crm_admin_reglage_lire', { p_cle: 'etapes' }).then(v => { etapes = v?.liste || ETAPES_DEPART; if (onglet === 'tableau') afficher(); },
+      () => { etapes = ETAPES_DEPART; if (onglet === 'tableau') afficher(); });
     try { [tableau, prospects] = await Promise.all([rpc('crm_admin_tableau'), prospects ? prospects : rpc('crm_admin_prospects').catch(() => null)]); }
     catch (err) { toast(err.message); tableau = { garages: [], apporteurs: 0, leads_30j: 0, ventes_reseau_30j: 0 }; }
     if (onglet === 'tableau') afficher();
@@ -294,7 +352,7 @@
       ${prospects.length ? `<div class="kpis">
         ${kpi('Garages à démarcher', prospects.length, `${prospects.filter(enCours).length} en cours`)}
         ${kpi('Démos faites', demos, prospects.length ? Math.round(demos / prospects.length * 100) + ' % des garages' : '')}
-        ${kpi('Signés', signes, demos ? Math.round(signes / demos * 100) + ' % des démos' : 'objectif ' + OBJECTIF + ' abonnés')}
+        ${kpi('Signés', signes, demos ? Math.round(signes / demos * 100) + ' % des démos' : 'premier palier : 5 partenaires')}
         ${kpi('À relancer', aRelancer.length, aRelancer.length ? "aujourd'hui ou en retard" : 'rien en retard', aRelancer.length ? 'negatif' : '')}
       </div>
       <div class="adm-entonnoir">${Object.entries(ETAPES).map(([k, [l, cls]]) => `<button type="button" class="adm-etape" data-filtre-pro="${k}"><span class="badge ${cls}">${l}</span><b>${n(k)}</b></button>`).join('')}</div>` : ''}
@@ -635,6 +693,20 @@
       const fl = e.target.closest('[data-filtre-lead]');
       if (fl) { filtreLead = fl.dataset.filtreLead; afficher(); return; }
       if (e.target.closest('#btn-actualiser')) { rafraichir(); return; }
+      if (e.target.id === 'etapes-modifier') { etapesAvant = etapes.map(x => ({ ...x })); editionEtapes = true; afficher(); return; }
+      if (e.target.id === 'etapes-annuler') { etapes = etapesAvant; editionEtapes = false; afficher(); return; }
+      if (e.target.id === 'etapes-ok') {
+        lireEtapes();
+        if (etapes.some(x => !x.titre)) { toast('Donne un nom à chaque étape (ou supprime-la).'); return; }
+        editionEtapes = false; afficher(); enregistrerEtapes(); return;
+      }
+      if (e.target.id === 'etape-ajouter') { lireEtapes(); etapes.push({ id: nouvelId(), titre: '', statut: 'a_faire', suite: '' }); afficher(); return; }
+      if (e.target.dataset.etapeSuppr != null) { lireEtapes(); etapes.splice(Number(e.target.dataset.etapeSuppr), 1); afficher(); return; }
+      if (e.target.dataset.etapeMonter != null) {
+        lireEtapes(); const i = Number(e.target.dataset.etapeMonter);
+        if (i > 0) [etapes[i - 1], etapes[i]] = [etapes[i], etapes[i - 1]];
+        afficher(); return;
+      }
       if (e.target.closest('#btn-pro-ajouter')) { ouvrirProspect(null); return; }
       if (e.target.closest('#btn-importer')) { $('#pro-fichier').click(); return; }
       if (e.target.closest('#btn-publier')) { publierAnnonce(); return; }
@@ -660,6 +732,8 @@
     });
     $('#vue').addEventListener('change', e => {
       if (e.target.dataset.abo) changerAbo(e.target.dataset.abo, e.target.value, e.target);
+      const eid = e.target.dataset.etapeStatut;
+      if (eid) { etapes = etapes.map(x => x.id === eid ? { ...x, statut: e.target.value } : x); afficher(); enregistrerEtapes(); return; }
       const pid = e.target.dataset.etape;
       if (pid) {
         const p = prospects.find(x => x.id === pid);
