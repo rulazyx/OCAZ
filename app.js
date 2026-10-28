@@ -568,6 +568,16 @@ function renderFiltres() {
 
 let rechercheOuverte = false;
 
+// Téléphone : Tableau de bord et Commandes ne sont pas dans la barre du bas (appli allégée, ils restent sur PC).
+// On ouvre alors sur le Stock (ou le premier onglet de la barre s'il est masqué).
+const SANS_TELEPHONE = ['donnees', 'commandes'];
+const telephone = () => matchMedia('(max-width: 899px)').matches;
+function ongletAccueil() {
+  if (!telephone()) return 'donnees';
+  const bas = [...document.querySelectorAll('#bottom-tabs [data-tab]')].filter(x => !x.hidden && !SANS_TELEPHONE.includes(x.dataset.tab));
+  return (bas.find(x => x.dataset.tab === 'stock') || bas[0])?.dataset.tab || 'donnees';
+}
+
 function switchTab(name) {
   onglet = name;
   document.body.dataset.onglet = name;
@@ -1005,7 +1015,7 @@ function afficherSync(status, user, role) {
     if (onglet === 'donnees') render();
   }
   // Déconnexion : les données quittent l'appareil (elles restent en ligne).
-  if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); Messagerie.arreter(); db.vider(); switchTab('donnees'); }
+  if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); Messagerie.arreter(); db.vider(); switchTab(ongletAccueil()); }
   afficherAuth(status, user, role);
   if (!['connexion', 'envoi'].includes(status)) chargement(false);
 }
@@ -1109,7 +1119,7 @@ $('#btn-mdp-changer').addEventListener('click', async () => {
 $('#btn-demo-reset').addEventListener('click', () => {
   if (!confirm('Remplacer les données de démo par les données d\'exemple de départ ?')) return;
   Demo.remplir(true);
-  switchTab('donnees');
+  switchTab(ongletAccueil());
   toast('Démo remise à zéro');
 });
 
@@ -1172,7 +1182,7 @@ $('#file-import').addEventListener('change', async e => {
     if (!confirm('Remplacer toutes les données actuelles par cette sauvegarde ?')) return;
     db.data = Object.assign({ seq: 0 }, data);
     db.save();
-    switchTab('donnees');
+    switchTab(ongletAccueil());
     toast('Sauvegarde importée');
   } catch (err) {
     toast("Ce fichier n'est pas une sauvegarde Ocaz valide.");
@@ -1262,7 +1272,7 @@ $('#btn-loupe').addEventListener('click', () => {
   if (rechercheOuverte) $('#search').focus();
 });
 $('#search-ico').innerHTML = icon('recherche', 18);
-switchTab('donnees');
+switchTab(ongletAccueil());
 // iOS ignore parfois user-scalable=no : on bloque aussi le geste de pincement.
 document.addEventListener('gesturestart', e => e.preventDefault());
 Offre.init();

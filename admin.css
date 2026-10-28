@@ -62,3 +62,13 @@ body.admin #bottom-tabs button .ico { padding: 4px 8px; width: 40px; }
 @media (max-width: 760px) { .adm-etape-edit { grid-template-columns: 1fr 120px; } .adm-etape-edit textarea { grid-column: 1 / -1; } }
 body.admin header #tabs button { white-space: nowrap; padding: 8px 11px; }
 @media (min-width: 900px) and (max-width: 1240px) { body.admin header #tabs button span { display: none; } }
+.adm-pro-vues { margin-bottom: 14px; }
+.adm-en-tete { display: flex; gap: 12px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 8px; }
+.adm-en-section { border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; margin-bottom: 10px; background: var(--card); }
+.adm-en-section summary { cursor: pointer; font-weight: 700; padding: 12px 0; list-style-position: outside; }
+.adm-en-section[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.adm-en-section .grid { padding-bottom: 12px; }
+.adm-en-l { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.adm-en-chips { flex-wrap: wrap; gap: 6px; }
+.adm-en-chips .chip { padding: 8px 13px; }
+.adm-en-note .chip { min-width: 40px; justify-content: center; text-align: center; }
