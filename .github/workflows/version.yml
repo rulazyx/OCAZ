@@ -1,0 +1,26 @@
+# À chaque mise en ligne (fusion dans main), réécrit version.json avec un nouveau numéro.
+# Les applis ouvertes (maj.js) le voient changer et proposent la mise à jour ; les téléphones jettent leur copie.
+name: Version publiée
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['version.json']
+permissions:
+  contents: write
+concurrency:
+  group: version
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nouveau numéro de version
+        run: |
+          printf '{ "version": "%s" }\n' "$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" > version.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898341+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "Version publiée ${GITHUB_SHA::7}"
+          git pull --rebase origin main
+          git push origin HEAD:main

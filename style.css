@@ -140,18 +140,6 @@ textarea { min-height: 70px; resize: vertical; }
 .empty strong { color: var(--text); font-size: 17px; }
 .empty span { max-width: 340px; font-size: 14px; }
 
-/* Planning */
-.rdv { display: flex; gap: 14px; align-items: stretch; }
-.rdv.fait { opacity: .6; }
-.rdv-date {
-  flex: none; width: 54px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); font-size: 11px; text-transform: uppercase; font-weight: 600; padding: 6px 0;
-}
-.rdv-date strong { font-size: 22px; line-height: 1.1; }
-.rdv-date.today { background: var(--primary); color: var(--on-primary); }
-.rdv-date.late { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
-.rdv-body { flex: 1; min-width: 0; }
-
 /* ---------- Filtres ---------- */
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 #filters { margin-top: 12px; display: grid; gap: 10px; }
@@ -258,44 +246,11 @@ details.fiche dd { margin: 0; word-break: break-word; }
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 @media (max-width: 899px) { input, select, textarea { font-size: 16px !important; } }
 
-/* ---------- Calendrier de la semaine ---------- */
-.semaine { grid-column: 1 / -1; display: grid; gap: 12px; }
+/* ---------- Navigation de semaine (calendrier de l'admin) ---------- */
 .semaine-nav { display: flex; align-items: center; gap: 8px; }
 .semaine-nav strong { flex: 1; text-align: center; font-size: 16px; text-transform: capitalize; }
 .semaine-nav .chip { min-width: 40px; font-size: 16px; padding: 6px 12px; }
 .semaine-nav [data-sem="0"] { font-size: 13.5px; }
-.jours { display: grid; gap: 8px; }
-.jour {
-  display: flex; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 10px 12px; cursor: pointer; box-shadow: var(--shadow); min-height: 62px; transition: border-color .15s;
-}
-.jour:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
-.jour.passe { opacity: .7; }
-.jour-tete {
-  flex: none; width: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted);
-}
-.jour-tete strong { font-size: 20px; color: var(--text); line-height: 1.1; }
-.jour.today .jour-tete { background: var(--primary); color: var(--on-primary); border-radius: 10px; }
-.jour.today .jour-tete strong { color: #fff; }
-.jour-evts { flex: 1; min-width: 0; display: grid; gap: 5px; align-content: center; }
-.evt { border-radius: 8px; padding: 5px 9px; font-size: 13px; line-height: 1.3; border-left: 3px solid currentColor; }
-.evt.fait { opacity: .5; text-decoration: line-through; }
-.evt-h { font-weight: 700; }
-.evt-t { font-weight: 600; }
-.evt-s { display: block; color: var(--text); opacity: .75; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jour-add { font-size: 12.5px; color: var(--muted); opacity: .75; transition: opacity .15s; }
-@media (hover: hover) {
-  .evt + .jour-add { opacity: 0; }
-  .jour:hover .jour-add { opacity: 1; }
-}
-@media (min-width: 900px) {
-  .jours { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .jour { flex-direction: column; min-height: 320px; padding: 10px 8px; }
-  .jour-tete { width: auto; flex-direction: row; gap: 6px; padding: 4px 0; }
-  .jour.today .jour-tete { padding: 4px 6px; }
-  .jour-evts { align-content: start; }
-}
 
 .vehicule-image { grid-column: 1 / -1; border-radius: var(--radius); overflow: hidden; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; }
 .vehicule-image img { max-width: 100%; max-height: 180px; object-fit: contain; display: block; }

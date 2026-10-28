@@ -4,7 +4,9 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
 
 ## Version 1
 
-- **Clients** : lister, rechercher, ajouter, modifier, supprimer.
+- **Clients** : plus d'onglet depuis le 27/10/2026 ; un client se crée dans l'offre (bloc « Nouveau client ») et sa fiche s'ouvre
+  depuis les leads, les révisions et le Tableau de bord. Le Planning n'a plus d'écran non plus : les relances et rappels
+  (`planning` dans les données) servent toujours au Tableau de bord et aux offres.
 - **Véhicules** : parcours Reprise à étudier → validée (En préparation / En stock) ou refusée → Réservé → Vendu.
   Fiche reprise : vendeur, état, cote estimée, frais, prix proposé, avec des liens vers les cotes gratuites (La Centrale, L'argus, Leboncoin).
   Idem pour lister et modifier, avec plaque, VIN, prix d'achat/vente, statut (En stock, Réservé, Vendu…).
@@ -12,12 +14,11 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   via la fonction Supabase `plaque` (voir plus bas).
 - **Commandes** : relie un client et un véhicule, prix, acompte, statut. Le statut du véhicule suit la commande
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
-- Sauvegarde : export / import d'un fichier `.json` (menu ⋯).
 
 ## Ocaz Pro (ocaz.re)
 
 Ce dépôt est l'appli des pros, à l'adresse `ocaz.re`. Le site public (véhicules du réseau, vitrines des garages, `integrer.js`,
-pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`), à l'adresse `reseau.ocaz.re`.
+pages légales, `rejoindre`, `outils`) est dans le dépôt `SITE-VITRINE-` (ex-`ocaz`, ex-`CRM-ZX`), à l'adresse `reseau.ocaz.re`.
 - L'appli n'est pas référencée : `robots.txt` interdit tout, et chaque page a `<meta name="robots" content="noindex">`.
   Aucun lien du site public ne mène ici : Anthony envoie lui-même l'adresse aux pros. La vraie protection reste la connexion.
 - L'appli s'ouvre directement sur la connexion unique, sans choix de profil ; l'espace (garage ou apporteur) dépend du compte.
@@ -31,7 +32,7 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`),
 
 - Plus d'inscription libre : l'administrateur (super-admin) crée tous les comptes depuis `admin.html` (`/admin`), où il arrive
   directement à la connexion. Identifiant court `admin` (table `crm_identifiants`), mot de passe de départ `admin` à changer avant le lancement.
-- Onglet **Commercial** : **Revendeurs** (infos légales, email de connexion, droits, packs livraison, comptes) et **Apporteurs** (fiche complète,
+- Onglet **Partenaires** (ex-Commercial) : **Revendeurs** (infos légales, email de connexion, droits, packs livraison, comptes) et **Apporteurs** (fiche complète,
   suspension, réinitialisation du mot de passe). Mot de passe de départ des comptes créés : `12345678`.
 - Droits d'un revendeur (`crm_entreprises.config`, lu par `droits.js`) : réseau Ocaz (+ commission), dépôt-vente, achat-revente.
   Achat-revente seul : pas d'onglet Dépôt vente. Dépôt-vente seul : pas d'onglet Reprise, Stock limité aux véhicules partenaires.
@@ -75,8 +76,18 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `ocaz` (ex-`CRM-ZX`),
 ## Technique
 
 Appli web statique (HTML, CSS, JavaScript, sans build), hébergeable gratuitement sur GitHub Pages.
-Les données sont pour l'instant stockées dans le navigateur de l'appareil (`localStorage`) ; tout passe par l'objet `db`
-dans `app.js` pour pouvoir brancher une base en ligne (Supabase) et synchroniser téléphone et PC.
+Les données de chaque garage sont dans Supabase (une ligne JSON par garage, table `crm_entreprises`, voir `sync.js`),
+avec une copie dans le navigateur (`localStorage`) ; tout passe par l'objet `db` dans `app.js`.
+
+### Mises à jour et ouverture rapide
+
+- `sw.js` garde une copie de l'appli sur l'appareil : elle s'ouvre depuis cette copie, sans redemander chaque fichier au serveur.
+- `version.json` change à chaque mise en ligne : l'action GitHub `.github/workflows/version.yml` le réécrit toute seule
+  après chaque fusion dans `main` (commit « Version publiée … » du robot). Ne pas le modifier à la main.
+- `maj.js` lit `version.json` toutes les 5 minutes : nouvelle version → bandeau « Mettre à jour ». À l'ouverture, si la copie
+  du téléphone est plus ancienne que la version en ligne, elle est jetée et l'appli se recharge tout de suite.
+- Les fichiers rarement utilisés se chargent à la demande (`chargerScript` dans `app.js`) : `qrcode.js`, `demo.js`,
+  et dans `vendor/` le PDF et l'Excel ; la lecture des documents (Tesseract) vient d'internet.
 
 Pour l'essayer en local : ouvrir `index.html` dans un navigateur.
 
@@ -88,16 +99,12 @@ Le fichier `CNAME` (contenu : `ocaz.re`) relie ce dépôt au domaine (zone DNS O
 - Supabase > Authentication > URL Configuration : Site URL = `https://ocaz.re`, Redirect URLs `https://ocaz.re/**`.
 Les données gardées dans le navigateur dépendent de l'adresse : en changeant d'adresse, il faut se reconnecter une fois.
 
-## Synchronisation PC / téléphone (Supabase)
+## Base Supabase
 
-1. Créer un compte gratuit sur supabase.com puis un projet.
-2. Dans SQL Editor, coller le contenu de `supabase.sql` et cliquer sur Run.
-3. Dans Authentication > URL Configuration, mettre l'adresse de l'appli dans Site URL et Redirect URLs.
-4. Dans Project Settings > API, copier Project URL et la clé publique (anon / publishable), puis les coller dans le menu ⋯ de l'appli
-   sur chaque appareil. Se connecter avec son email (lien de connexion reçu par email).
-
-Toutes les données d'un compte sont dans une ligne JSON de la table `crm_data`, protégée par une règle d'accès (RLS).
-La modification la plus récente l'emporte.
+- Projet `CRMZX`. L'adresse et la clé publique sont dans `config.js` (clé publique, faite pour être visible).
+- `supabase.sql` crée ou met à jour toute la base et peut être relancé sans risque (SQL Editor > Run).
+- Toutes les données d'un garage sont dans sa ligne JSON de `crm_entreprises`, protégée par les règles d'accès (RLS).
+  Quand deux appareils modifient en même temps, la synchronisation fusionne fiche par fiche (`sync.js`).
 
 ## Recherche par plaque (fonction Supabase `plaque`)
 
