@@ -906,6 +906,9 @@ function remplirParametres() {
   majInstall();
 }
 $('#btn-menu').addEventListener('click', () => switchTab('parametres'));
+// Logo OCAZ : retour au Tableau de bord (accessible aussi sur téléphone où l'onglet est masqué).
+$('.brand').addEventListener('click', () => switchTab('donnees'));
+$('.brand').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab('donnees'); } });
 
 // ---------- Comptes et synchronisation ----------
 const SYNC_TEXTE = { off: 'Non connecté', connexion: 'Connexion…', ok: 'Synchronisé', envoi: 'Envoi…', erreur: 'Erreur de synchro', refuse: 'Accès refusé', 'nouveau-mdp': 'Nouveau mot de passe' };

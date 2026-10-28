@@ -38,6 +38,8 @@ header {
   box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
 }
 .brand { display: flex; align-items: center; gap: 9px; flex: 1; }
+.brand[role="button"] { flex: none; margin-right: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.brand[role="button"] > * { flex: none; }
 .brand img { border-radius: 9px; }
 .brand-name { font-size: 19px; }
 #tabs { display: none; gap: 2px; background: rgba(255, 255, 255, .06); padding: 4px; border-radius: 12px; }
