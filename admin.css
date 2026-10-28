@@ -17,3 +17,13 @@
 @media (max-width: 560px) { .adm-pack { grid-template-columns: 1fr 90px; } }
 .adm-info { background: color-mix(in srgb, var(--primary) 8%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }
 .adm-abo { margin: 4px 0 0; }
+.adm-objectifs { margin-top: 12px; }
+.adm-objectifs > div { display: grid; gap: 6px; }
+.adm-barre { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.adm-barre span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.adm-abo-liste { gap: 0; padding: 4px 12px; }
+.adm-abo-ligne { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.adm-abo-ligne:last-child { border-bottom: 0; }
+.adm-abo-nom { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; display: grid; gap: 2px; font: inherit; }
+.adm-abo-nom small { color: var(--muted); font-size: 12.5px; }
+.adm-abo-ligne select { width: auto; min-width: 130px; }

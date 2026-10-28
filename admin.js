@@ -1,4 +1,5 @@
-// Interface de l'administrateur d'Ocaz (super-admin seulement) : onglet Commercial avec les revendeurs et les apporteurs.
+// Interface de l'administrateur d'Ocaz (super-admin seulement) : onglet Partenaires (revendeurs et apporteurs)
+// et onglet Abonnements (suivi des revendeurs payants, revenu mensuel, essais qui se terminent, impayés).
 // L'administrateur est le seul à créer les comptes : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente)
 // et packs livraison de chaque revendeur ; fiche complète de chaque apporteur. Mot de passe de départ : 12345678.
 (() => {
@@ -18,6 +19,14 @@
   const ABO = { essai: ['Essai gratuit', 'b-orange'], actif: ['Abonné', 'b-green'], impaye: ['Impayé', 'b-red'], resilie: ['Résilié', 'b-grey'], offert: ['Offert', 'b-purple'] };
   const auj = () => new Date().toISOString().slice(0, 10);
   const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
+  const OBJECTIF = 30, CAP = 100; // 30 abonnés d'ici avril 2027, puis une centaine de garages partenaires
+  const jours = d => Math.round((new Date(d + 'T12:00:00') - new Date(auj() + 'T12:00:00')) / 864e5);
+  // Prochain prélèvement : fin de l'essai, puis le même jour chaque mois.
+  function prochainPaiement(debut) {
+    const d = new Date(finEssai(debut) + 'T12:00:00'), a = auj();
+    while (d.toISOString().slice(0, 10) < a) d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  }
   const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   const PACKS = [{ id: 'demarches', nom: 'Démarches administratives', montant: 150, coche: true }, { id: 'protection', nom: 'Protection de peinture', montant: 250, coche: false }];
   const APP = [['prenom', 'Prénom *'], ['nom', 'Nom *'], ['telephone', 'Téléphone', '', 'tel'], ['adresse', 'Adresse', 'full'], ['code_postal', 'Code postal'], ['ville', 'Ville'],
@@ -25,7 +34,7 @@
 
   let client = null, user = null;
   let revendeurs = [], apporteurs = [];
-  let vue = 'revendeurs', q = '';
+  let onglet = 'partenaires', vue = 'revendeurs', q = '', filtreAbo = 'tous';
   let rev = null, app = null; // fiches ouvertes
 
   function toast(msg) {
@@ -74,7 +83,7 @@
     afficher();
   }
 
-  // ---------- Onglet Commercial ----------
+  // ---------- Onglet Partenaires ----------
   const droitsDe = c => c?.droits || { reseau: false, depot: true, achat: true };
   function carteRevendeur(g) {
     const c = g.config || {}, d = droitsDe(c), i = c.infos || {};
@@ -94,11 +103,6 @@
     const [l, cls] = ABO[a.statut] || ABO.essai;
     return `<span class="badge ${cls}">${l}${a.statut === 'essai' && a.debut ? " jusqu'au " + dateFr(finEssai(a.debut)) : ''}</span>`;
   }
-  function resumeAbo() {
-    const n = st => revendeurs.filter(g => !g.demo && !g.admin && g.config?.abonnement?.statut === st).length;
-    const actifs = n('actif'), essais = n('essai'), impayes = n('impaye');
-    return `<p class="hint adm-abo">Abonnés : <b>${actifs}</b> · revenu mensuel : <b>${eur(actifs * PRIX)}</b>${essais ? ` · ${essais} en essai (+${eur(essais * PRIX)} s'ils restent)` : ''}${impayes ? ` · <b>${impayes} impayé(s)</b>` : ''} · objectif : 30 abonnés</p>`;
-  }
   function carteApporteur(a) {
     return `<button type="button" class="card" data-app="${esc(a.email)}">
       <div class="top"><span class="title">${esc([a.prenom, a.nom].join(' '))}</span>
@@ -109,20 +113,102 @@
     </button>`;
   }
   function afficher() {
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === onglet));
+    if (onglet === 'abonnements') afficherAbonnements(); else afficherPartenaires();
+  }
+  function afficherPartenaires() {
     const liste = vue === 'revendeurs'
       ? revendeurs.filter(g => !q || norm([g.nom, JSON.stringify(g.config?.infos || {}), (g.comptes || []).map(c => c.email).join(' ')].join(' ')).includes(norm(q)))
       : apporteurs.filter(a => !q || norm([a.prenom, a.nom, a.email, a.telephone, a.ville].join(' ')).includes(norm(q)));
     $('#vue').innerHTML = `<div class="ap-page">
-      <div class="adm-tete"><h2>Commercial</h2>
+      <div class="adm-tete"><h2>Partenaires</h2>
         <button type="button" class="primary" id="btn-ajouter">${icon('plus', 18)}<span>${vue === 'revendeurs' ? 'Ajouter un revendeur' : 'Ajouter un apporteur'}</span></button></div>
       <div class="adm-outils"><div class="segmented">
         <button type="button" data-vue="revendeurs" class="${vue === 'revendeurs' ? 'active' : ''}">Revendeurs (${revendeurs.length})</button>
         <button type="button" data-vue="apporteurs" class="${vue === 'apporteurs' ? 'active' : ''}">Apporteurs (${apporteurs.length})</button></div>
         <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher…" value="${esc(q)}" autocomplete="off"></div></div>
-      ${vue === 'revendeurs' ? resumeAbo() : ''}
       <div class="adm-liste">${liste.length ? liste.map(vue === 'revendeurs' ? carteRevendeur : carteApporteur).join('')
         : `<div class="empty"><strong>${q ? 'Aucun résultat' : vue === 'revendeurs' ? 'Aucun revendeur' : 'Aucun apporteur'}</strong><span>${q ? 'Essaie une autre recherche.' : 'Ajoute le premier avec le bouton ci-dessus.'}</span></div>`}</div>
     </div>`;
+  }
+
+  // ---------- Onglet Abonnements ----------
+  const payants = () => revendeurs.filter(g => !g.demo && !g.admin);
+  const statutDe = g => g.config?.abonnement?.statut || 'aregler';
+  function detailAbo(g) {
+    const a = g.config?.abonnement || {};
+    if (!a.statut) return "Pas encore réglé : ouvre-le pour lancer son essai gratuit.";
+    if (a.statut === 'essai') {
+      const f = finEssai(a.debut || auj()), n = jours(f);
+      return n < 0 ? `Essai terminé le ${dateFr(f)} : passe-le en « Abonné » s'il a payé.` : `Fin de l'essai le ${dateFr(f)} (${n ? 'dans ' + n + ' j' : "aujourd'hui"}), premier paiement ce jour-là.`;
+    }
+    if (a.statut === 'actif') return `Abonné depuis le ${dateFr(finEssai(a.debut || auj()))} · prochain paiement le ${dateFr(prochainPaiement(a.debut || auj()))}`;
+    if (a.statut === 'impaye') return `Paiement en retard${a.maj ? ' depuis le ' + dateFr(a.maj) : ''} : relance-le.`;
+    if (a.statut === 'resilie') return `Résilié${a.fin ? ' le ' + dateFr(a.fin) : ''}.`;
+    return 'Offert : rien à payer.';
+  }
+  // À traiter : impayés, essais qui se terminent dans 7 jours (ou déjà finis), revendeurs sans abonnement réglé.
+  const aTraiter = g => {
+    const a = g.config?.abonnement;
+    return !a?.statut || a.statut === 'impaye' || (a.statut === 'essai' && jours(finEssai(a.debut || auj())) <= 7);
+  };
+  function ligneAbo(g) {
+    const st = statutDe(g);
+    return `<div class="adm-abo-ligne">
+      <button type="button" class="adm-abo-nom" data-rev="${esc(g.id)}"><b>${esc(g.nom)}</b><small>${esc(detailAbo(g))}</small></button>
+      <select data-abo="${esc(g.id)}" aria-label="Statut de l'abonnement de ${esc(g.nom)}">
+        ${st === 'aregler' ? '<option value="" selected>À régler</option>' : ''}
+        ${Object.entries(ABO).map(([k, [l]]) => `<option value="${k}"${st === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    </div>`;
+  }
+  function afficherAbonnements() {
+    const tous = payants();
+    const n = st => tous.filter(g => statutDe(g) === st).length;
+    const actifs = n('actif'), essais = n('essai'), impayes = n('impaye');
+    const partenaires = actifs + essais + impayes + n('offert');
+    const urgents = tous.filter(aTraiter);
+    const FILTRES = [['tous', 'Tous', tous.length], ['actif', 'Abonnés', actifs], ['essai', 'En essai', essais], ['impaye', 'Impayés', impayes],
+      ['resilie', 'Résiliés', n('resilie')], ['offert', 'Offerts', n('offert')], ['aregler', 'À régler', n('aregler')]].filter(([k, , c]) => k === 'tous' || c);
+    if (!FILTRES.some(([k]) => k === filtreAbo)) filtreAbo = 'tous';
+    const liste = tous.filter(g => filtreAbo === 'tous' || statutDe(g) === filtreAbo)
+      .filter(g => !q || norm(g.nom).includes(norm(q)));
+    const barre = (v, max) => `<div class="adm-barre"><span style="width:${Math.min(100, Math.round(v / max * 100))}%"></span></div>`;
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Abonnements</h2><span class="hint">${eur(PRIX)} par mois · premier mois offert · sans engagement</span></div>
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-l">Revenu mensuel</span><span class="kpi-v">${eur(actifs * PRIX)}</span><span class="kpi-s">${actifs} abonné(s) qui paient</span></div>
+        <div class="kpi"><span class="kpi-l">En essai gratuit</span><span class="kpi-v">${essais}</span><span class="kpi-s">${essais ? '+' + eur(essais * PRIX) + " s'ils restent" : 'Aucun en ce moment'}</span></div>
+        <div class="kpi${impayes ? ' negatif' : ''}"><span class="kpi-l">Impayés</span><span class="kpi-v">${impayes}</span><span class="kpi-s">${impayes ? eur(impayes * PRIX) + ' en attente' : 'Tout est à jour'}</span></div>
+        <div class="kpi"><span class="kpi-l">Revenu à ${CAP} garages</span><span class="kpi-v">${eur(CAP * PRIX)}</span><span class="kpi-s">par mois, ${eur(CAP * PRIX * 12)} par an</span></div>
+      </div>
+      <div class="adm-bloc adm-objectifs">
+        <div><span>Objectif ${OBJECTIF} abonnés (avril 2027) : <b>${actifs} / ${OBJECTIF}</b></span>${barre(actifs, OBJECTIF)}</div>
+        <div><span>Cap des ${CAP} garages partenaires : <b>${partenaires} / ${CAP}</b> <small class="hint">(abonnés, essais, impayés et offerts)</small></span>${barre(partenaires, CAP)}</div>
+      </div>
+      ${urgents.length ? `<h3 class="section">À traiter (${urgents.length})</h3><div class="adm-bloc adm-abo-liste">${urgents.map(ligneAbo).join('')}</div>` : ''}
+      <h3 class="section">Tous les revendeurs</h3>
+      <div class="adm-outils"><div class="chips">${FILTRES.map(([k, l, c]) => `<button type="button" class="chip${filtreAbo === k ? ' active' : ''}" data-filtre="${k}">${l} (${c})</button>`).join('')}</div>
+        <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher un revendeur…" value="${esc(q)}" autocomplete="off"></div></div>
+      <div class="adm-bloc adm-abo-liste">${liste.length ? liste.map(ligneAbo).join('')
+        : `<div class="empty"><strong>${tous.length ? 'Aucun résultat' : 'Aucun revendeur payant'}</strong><span>${tous.length ? 'Essaie un autre filtre.' : 'Ajoute-les dans l\'onglet Partenaires.'}</span></div>`}</div>
+      <p class="hint">Mis à jour à la main pour l'instant. Une fois Stripe branché, les statuts changeront tout seuls.</p>
+    </div>`;
+  }
+  async function changerAbo(id, statut, select) {
+    const g = revendeurs.find(x => x.id === id);
+    if (!g || !statut) return;
+    const c = g.config || {};
+    const a = { debut: auj(), ...(c.abonnement || {}), statut, maj: auj() };
+    if (statut === 'essai' && !c.abonnement?.statut) a.debut = auj();
+    if (statut === 'resilie') a.fin = auj(); else delete a.fin;
+    const config = { ...c, infos: { ...(c.infos || {}), nom: c.infos?.nom || g.nom }, abonnement: a };
+    select.disabled = true;
+    try {
+      await rpc('crm_admin_revendeur_enregistrer', { p_id: id, p_email: '', p_config: config });
+      g.config = config;
+      toast(`${g.nom} : ${ABO[statut][0]}`);
+    } catch (err) { toast(err.message); }
+    afficher();
   }
 
   // ---------- Fiche revendeur ----------
@@ -180,7 +266,11 @@
   }
   function lireRevendeur() {
     rev.email = ($('#rev-email')?.value || '').trim().toLowerCase();
-    if ($('#abo-statut')) rev.abonnement = { ...rev.abonnement, statut: $('#abo-statut').value, debut: $('#abo-debut').value || auj() };
+    if ($('#abo-statut')) {
+      const statut = $('#abo-statut').value;
+      if (statut !== rev.abonnement.statut) { rev.abonnement.maj = auj(); if (statut === 'resilie') rev.abonnement.fin = auj(); else delete rev.abonnement.fin; }
+      rev.abonnement = { ...rev.abonnement, statut, debut: $('#abo-debut').value || auj() };
+    }
     document.querySelectorAll('#rev-body [data-ri]').forEach(i => { rev.infos[i.dataset.ri] = i.value.trim(); });
     document.querySelectorAll('#rev-body [data-droit]').forEach(i => { rev.droits[i.dataset.droit] = i.checked; });
     document.querySelectorAll('#rev-body [data-rc]').forEach(i => { rev.reseau[i.dataset.rc] = i.dataset.rc === 'commissionType' ? i.value : Number(i.value) || 0; });
@@ -262,7 +352,11 @@
 
   // ---------- Démarrage ----------
   function init() {
-    document.querySelectorAll('[data-tab]').forEach(b => { b.innerHTML = icon('clients', 18) + '<span>' + b.textContent + '</span>'; });
+    document.querySelectorAll('[data-tab]').forEach(b => {
+      const ic = { partenaires: 'clients', abonnements: 'abonnements' }[b.dataset.tab];
+      b.innerHTML = icon(ic, b.closest('#bottom-tabs') ? 22 : 18) + '<span>' + b.textContent + '</span>';
+      b.addEventListener('click', () => { onglet = b.dataset.tab; q = ''; afficher(); window.scrollTo(0, 0); });
+    });
     $('#btn-menu').innerHTML = icon('reglages', 20);
     $('#btn-menu').addEventListener('click', () => $('#dlg-compte').showModal());
     $('#compte-fermer').addEventListener('click', () => $('#dlg-compte').close());
@@ -280,11 +374,16 @@
     $('#vue').addEventListener('click', e => {
       const v = e.target.closest('[data-vue]');
       if (v) { vue = v.dataset.vue; q = ''; afficher(); return; }
+      const f = e.target.closest('[data-filtre]');
+      if (f) { filtreAbo = f.dataset.filtre; afficher(); return; }
       if (e.target.closest('#btn-ajouter')) { if (vue === 'revendeurs') ouvrirRevendeur(null); else ouvrirApporteur(null); return; }
       const r = e.target.closest('[data-rev]');
       if (r) { ouvrirRevendeur(r.dataset.rev); return; }
       const a = e.target.closest('[data-app]');
       if (a) ouvrirApporteur(a.dataset.app);
+    });
+    $('#vue').addEventListener('change', e => {
+      if (e.target.dataset.abo) changerAbo(e.target.dataset.abo, e.target.value, e.target);
     });
     $('#vue').addEventListener('input', e => {
       if (e.target.id !== 'adm-q') return;
