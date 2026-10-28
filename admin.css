@@ -16,3 +16,31 @@
 .adm-pack { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto auto; gap: 8px; align-items: center; }
 @media (max-width: 560px) { .adm-pack { grid-template-columns: 1fr 90px; } }
 .adm-info { background: color-mix(in srgb, var(--primary) 8%, transparent); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }
+.adm-abo { margin: 4px 0 0; }
+.adm-objectifs { margin-top: 12px; }
+.adm-objectifs > div { display: grid; gap: 6px; }
+.adm-barre { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.adm-barre span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.adm-abo-liste { gap: 0; padding: 4px 12px; }
+.adm-abo-ligne { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.adm-abo-ligne:last-child { border-bottom: 0; }
+.adm-abo-nom { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; display: grid; gap: 2px; font: inherit; }
+.adm-abo-nom small { color: var(--muted); font-size: 12.5px; }
+.adm-abo-ligne select { width: auto; min-width: 130px; }
+.adm-retard { color: var(--danger); font-weight: 600; }
+.adm-note { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-abo-ligne .chip { text-decoration: none; white-space: nowrap; color: inherit; }
+.adm-entonnoir { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+@media (max-width: 760px) { .adm-entonnoir { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.adm-etape { display: grid; gap: 4px; justify-items: center; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: inherit; cursor: pointer; font: inherit; }
+.adm-etape .badge { font-size: 11px; white-space: normal; text-align: center; }
+.adm-etape b { font-size: 18px; }
+.adm-table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.adm-table th, .adm-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.adm-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.adm-table tbody tr { cursor: pointer; }
+.adm-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.adm-table tbody tr:last-child td { border-bottom: 0; }
+body.admin #bottom-tabs button .ico { padding: 4px 8px; width: 40px; }
+.adm-publier { display: flex; justify-content: flex-end; }

@@ -945,3 +945,182 @@ revoke execute on function public.crm_admin_revendeurs(), public.crm_admin_reven
 grant execute on function public.crm_admin_revendeurs(), public.crm_admin_revendeur_enregistrer(uuid, text, jsonb), public.crm_admin_compte_retirer(text),
   public.crm_admin_apporteur_enregistrer(text, jsonb, boolean), public.crm_apporteurs_liste(), public.crm_apporteur_maj(jsonb),
   public.crm_apporteur_signer(text, text), public.crm_apporteur_mdp_change(), public.crm_reinit_mdp(text), public.crm_reseau_partenaires() to authenticated;
+
+-- =====================================================================================================
+-- Admin : prospection des garages, tableau de bord du réseau, leads de tous les garages, annonces.
+-- Tout passe par des fonctions réservées au super-admin (les tables n'ont aucune règle de lecture directe).
+-- =====================================================================================================
+
+-- Prospection : les garages à signer et l'étape où en est chacun.
+create table if not exists public.crm_prospects (
+  id uuid primary key default gen_random_uuid(),
+  nom text not null,
+  ville text not null default '',
+  telephone text not null default '',
+  email text not null default '',
+  contact text not null default '',
+  lot text not null default '',
+  etape text not null default 'a_contacter'
+    check (etape in ('a_contacter', 'appele', 'demo_prevue', 'demo_faite', 'essai', 'signe', 'pas_interesse')),
+  note text not null default '',
+  relance date,
+  entreprise_id uuid references public.crm_entreprises (id) on delete set null,
+  cree_le timestamptz not null default now(),
+  maj_le timestamptz not null default now()
+);
+alter table public.crm_prospects enable row level security;
+
+create or replace function public.crm_admin_prospects() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select json_agg(p order by p.relance nulls last, p.maj_le desc) from public.crm_prospects p), '[]'::json);
+end $$;
+
+-- Crée (sans id) ou met à jour (avec id) un prospect.
+create or replace function public.crm_admin_prospect_enregistrer(p jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := nullif(p ->> 'id', '')::uuid;
+  n text := left(trim(coalesce(p ->> 'nom', '')), 120);
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if n = '' then raise exception 'Le nom du garage est obligatoire.'; end if;
+  if pid is null then
+    insert into public.crm_prospects (nom) values (n) returning id into pid;
+  end if;
+  update public.crm_prospects set nom = n,
+    ville = left(coalesce(p ->> 'ville', ''), 80), telephone = left(coalesce(p ->> 'telephone', ''), 40),
+    email = left(coalesce(p ->> 'email', ''), 120), contact = left(coalesce(p ->> 'contact', ''), 120),
+    lot = left(coalesce(p ->> 'lot', ''), 20), etape = coalesce(nullif(p ->> 'etape', ''), 'a_contacter'),
+    note = left(coalesce(p ->> 'note', ''), 4000), relance = nullif(p ->> 'relance', '')::date,
+    entreprise_id = nullif(p ->> 'entreprise_id', '')::uuid, maj_le = now()
+  where id = pid;
+  if not found then raise exception 'Prospect introuvable.'; end if;
+  return pid;
+end $$;
+
+create or replace function public.crm_admin_prospect_supprimer(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  delete from public.crm_prospects where id = p_id;
+end $$;
+
+-- Import d'une liste (fichier CSV lu par l'appli) : les garages déjà présents (même nom) sont ignorés.
+create or replace function public.crm_admin_prospects_importer(p jsonb) returns integer
+language plpgsql security definer set search_path = public as $$
+declare x jsonb; n integer := 0; v_nom text;
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if jsonb_typeof(p) <> 'array' or jsonb_array_length(p) > 1000 then raise exception 'Liste invalide.'; end if;
+  for x in select * from jsonb_array_elements(p) loop
+    v_nom := left(trim(coalesce(x ->> 'nom', '')), 120);
+    continue when v_nom = '' or exists (select 1 from public.crm_prospects p where lower(p.nom) = lower(v_nom));
+    insert into public.crm_prospects (nom, ville, telephone, email, lot, etape, note)
+    values (v_nom, left(coalesce(x ->> 'ville', ''), 80), left(coalesce(x ->> 'telephone', ''), 40), left(coalesce(x ->> 'email', ''), 120),
+      left(coalesce(x ->> 'lot', ''), 20),
+      case when x ->> 'etape' in ('a_contacter', 'appele', 'demo_prevue', 'demo_faite', 'essai', 'signe', 'pas_interesse') then x ->> 'etape' else 'a_contacter' end,
+      left(coalesce(x ->> 'note', ''), 4000));
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- Tableau de bord : l'activité de chaque garage (dernière connexion, stock, ventes et leads des 30 derniers jours).
+create or replace function public.crm_admin_tableau() returns json
+language plpgsql stable security definer set search_path = public as $$
+declare depuis text := to_char(current_date - 30, 'YYYY-MM-DD');
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return json_build_object(
+    'garages', coalesce((select json_agg(g order by g.derniere_connexion desc nulls last) from (
+      select en.id, en.nom, en.demo, en.config -> 'abonnement' ->> 'statut' as abonnement, nullif(en.updated_at, '') as maj_donnees,
+        exists (select 1 from public.crm_membres m join public.crm_superadmins s on s.email = m.email where m.entreprise_id = en.id) as admin,
+        (select max(u.last_sign_in_at) from public.crm_membres m join auth.users u on lower(u.email) = m.email where m.entreprise_id = en.id) as derniere_connexion,
+        (select count(*) from jsonb_array_elements(coalesce(en.data -> 'vehicules', '[]'::jsonb)) v
+          where v ->> 'statut' in ('En stock', 'En préparation', 'Réservé')) as stock,
+        (select count(*) from jsonb_array_elements(coalesce(en.data -> 'vehicules', '[]'::jsonb)) v
+          where v ->> 'statut' = 'Vendu' and coalesce(v ->> 'dateVente', '') >= depuis) as ventes_30j,
+        (select count(*) from jsonb_array_elements(coalesce(en.data -> 'commandes', '[]'::jsonb)) o
+          where coalesce(o ->> 'date', '') >= depuis) as offres_30j,
+        coalesce((select case when r.actif then jsonb_array_length(coalesce(r.data -> 'vehicules', '[]'::jsonb)) else 0 end
+          from public.crm_reseau r where r.entreprise_id = en.id), 0) as en_ligne,
+        (select count(*) from public.crm_leads l where l.entreprise_id = en.id and l.cree_le > now() - interval '30 days') as leads_30j,
+        (select count(*) from public.crm_leads l where l.entreprise_id = en.id and l.statut = 'nouveau') as leads_attente
+      from public.crm_entreprises en) g), '[]'::json),
+    'apporteurs', (select count(*) from public.crm_apporteurs where statut = 'actif' and not coalesce(demo, false)),
+    'leads_30j', (select count(*) from public.crm_leads l join public.crm_entreprises en on en.id = l.entreprise_id where not en.demo and l.cree_le > now() - interval '30 days'),
+    'ventes_reseau_30j', (select count(*) from public.crm_leads l join public.crm_entreprises en on en.id = l.entreprise_id where not en.demo and l.statut = 'vendu' and l.statut_le > now() - interval '30 days'));
+end $$;
+
+-- Leads réseau : les 500 derniers leads de tous les garages, sans les coordonnées du client.
+create or replace function public.crm_admin_leads() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select json_agg(x order by x.cree_le desc) from (
+    select l.id, l.numero, l.cree_le, l.statut, l.statut_le, l.pris_le, l.vehicule, l.vehicule_prix, l.commission, l.commission_finale, l.payee,
+      l.motif, en.nom as garage, en.demo, trim(coalesce(a.prenom, '') || ' ' || coalesce(a.nom, '')) as apporteur,
+      trim(l.client_prenom || ' ' || left(l.client_nom, 1) || '.') as client
+    from public.crm_leads l join public.crm_entreprises en on en.id = l.entreprise_id
+      left join public.crm_apporteurs a on a.email = l.apporteur_email
+    order by l.cree_le desc limit 500) x), '[]'::json);
+end $$;
+
+-- Annonces : un message de l'administrateur affiché en bandeau chez les revendeurs, les apporteurs, ou tous.
+create table if not exists public.crm_annonces (
+  id uuid primary key default gen_random_uuid(),
+  titre text not null,
+  texte text not null default '',
+  cible text not null default 'tous' check (cible in ('tous', 'revendeurs', 'apporteurs')),
+  actif boolean not null default true,
+  fin date,
+  cree_le timestamptz not null default now()
+);
+alter table public.crm_annonces enable row level security;
+
+create or replace function public.crm_admin_annonces() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select json_agg(a order by a.cree_le desc) from public.crm_annonces a), '[]'::json);
+end $$;
+
+create or replace function public.crm_admin_annonce_enregistrer(p jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare aid uuid := nullif(p ->> 'id', '')::uuid; t text := left(trim(coalesce(p ->> 'titre', '')), 140);
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if t = '' then raise exception 'Le titre est obligatoire.'; end if;
+  if aid is null then insert into public.crm_annonces (titre) values (t) returning id into aid; end if;
+  update public.crm_annonces set titre = t, texte = left(coalesce(p ->> 'texte', ''), 2000),
+    cible = coalesce(nullif(p ->> 'cible', ''), 'tous'), actif = coalesce((p ->> 'actif')::boolean, true), fin = nullif(p ->> 'fin', '')::date
+  where id = aid;
+  if not found then raise exception 'Annonce introuvable.'; end if;
+  return aid;
+end $$;
+
+create or replace function public.crm_admin_annonce_supprimer(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  delete from public.crm_annonces where id = p_id;
+end $$;
+
+-- Annonces en cours pour le compte connecté (revendeur, apporteur ou les deux).
+create or replace function public.crm_annonces_lire() returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_agg(json_build_object('id', a.id, 'titre', a.titre, 'texte', a.texte, 'cree_le', a.cree_le) order by a.cree_le desc), '[]'::json)
+  from public.crm_annonces a
+  where a.actif and (a.fin is null or a.fin >= current_date)
+    and (a.cible = 'tous'
+      or (a.cible = 'revendeurs' and public.crm_entreprise() is not null)
+      or (a.cible = 'apporteurs' and exists (select 1 from public.crm_apporteurs where email = lower(auth.jwt() ->> 'email'))));
+$$;
+
+revoke execute on function public.crm_admin_prospects(), public.crm_admin_prospect_enregistrer(jsonb), public.crm_admin_prospect_supprimer(uuid),
+  public.crm_admin_prospects_importer(jsonb), public.crm_admin_tableau(), public.crm_admin_leads(), public.crm_admin_annonces(),
+  public.crm_admin_annonce_enregistrer(jsonb), public.crm_admin_annonce_supprimer(uuid), public.crm_annonces_lire() from public, anon;
+grant execute on function public.crm_admin_prospects(), public.crm_admin_prospect_enregistrer(jsonb), public.crm_admin_prospect_supprimer(uuid),
+  public.crm_admin_prospects_importer(jsonb), public.crm_admin_tableau(), public.crm_admin_leads(), public.crm_admin_annonces(),
+  public.crm_admin_annonce_enregistrer(jsonb), public.crm_admin_annonce_supprimer(uuid), public.crm_annonces_lire() to authenticated;

@@ -993,7 +993,7 @@ function afficherSync(status, user, role) {
   if (role) etaitConnecte = true;
   if (status === 'ok') {
     // Vitrine en ligne : demandes des visiteurs en direct, et copie publique remise à jour.
-    if (!vitrineDemarree) { vitrineDemarree = true; EnLigne.demarrer(); Reseau.demarrer(); } else { EnLigne.planifier(); Reseau.planifier(); }
+    if (!vitrineDemarree) { vitrineDemarree = true; EnLigne.demarrer(); Reseau.demarrer(); Annonces.afficher(Sync.client); } else { EnLigne.planifier(); Reseau.planifier(); }
     // Nom de l'entreprise donné à la création du compte : repris dans les infos du garage.
     if (Sync.entreprise?.nom && !Param.get().garage.nom) Param.save({ garage: { ...Param.get().garage, nom: Sync.entreprise.nom } });
     // Compte démo vide : on le remplit avec des données d'exemple.

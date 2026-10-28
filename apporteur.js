@@ -83,6 +83,7 @@
       await Promise.all([chargerReseau(), chargerLeads()]);
       ecouter();
       afficher(onglet);
+      Annonces.afficher(client);
     } catch (err) {
       verrou(false);
       $('#vue').innerHTML = `<div class="empty"><strong>Connexion impossible</strong><span>${esc(err.message)}</span></div>`;

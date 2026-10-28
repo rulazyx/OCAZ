@@ -1,4 +1,6 @@
-// Interface de l'administrateur d'Ocaz (super-admin seulement) : onglet Commercial avec les revendeurs et les apporteurs.
+// Interface de l'administrateur d'Ocaz (super-admin seulement), pensée pour faire grandir le réseau jusqu'à une centaine de garages :
+// Tableau de bord (activité de chaque garage), Prospection (garages à signer), Partenaires (revendeurs et apporteurs),
+// Abonnements (revenu mensuel, essais, impayés), Leads réseau (tous les leads) et Annonces (bandeau chez les partenaires).
 // L'administrateur est le seul à créer les comptes : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente)
 // et packs livraison de chaque revendeur ; fiche complète de chaque apporteur. Mot de passe de départ : 12345678.
 (() => {
@@ -13,13 +15,29 @@
     ['codePostal', 'Code postal'], ['ville', 'Ville'], ['telephone', 'Téléphone', '', 'tel'], ['email', 'Email affiché sur les documents', '', 'email'], ['site', 'Site web', 'full']];
   const DROITS = [['reseau', 'Rejoindre le réseau Ocaz', 'Ses véhicules sont partagés avec les apporteurs et sur le site du réseau ; il reçoit des leads.'],
     ['depot', 'Dépôt-vente', 'Onglet « Dépôt vente ».'], ['achat', 'Achat-revente', 'Onglet « Reprise » et stock de véhicules achetés.']];
+  // Abonnement revendeur : suivi à la main en attendant Stripe. Premier mois offert, sans engagement.
+  const PRIX = 69.99;
+  const ABO = { essai: ['Essai gratuit', 'b-orange'], actif: ['Abonné', 'b-green'], impaye: ['Impayé', 'b-red'], resilie: ['Résilié', 'b-grey'], offert: ['Offert', 'b-purple'] };
+  const auj = () => new Date().toISOString().slice(0, 10);
+  const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
+  const OBJECTIF = 30, CAP = 100; // 30 abonnés d'ici avril 2027, puis une centaine de garages partenaires
+  const jours = d => Math.round((new Date(d + 'T12:00:00') - new Date(auj() + 'T12:00:00')) / 864e5);
+  // Prochain prélèvement : fin de l'essai, puis le même jour chaque mois.
+  function prochainPaiement(debut) {
+    const d = new Date(finEssai(debut) + 'T12:00:00'), a = auj();
+    while (d.toISOString().slice(0, 10) < a) d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  const eur = n => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   const PACKS = [{ id: 'demarches', nom: 'Démarches administratives', montant: 150, coche: true }, { id: 'protection', nom: 'Protection de peinture', montant: 250, coche: false }];
   const APP = [['prenom', 'Prénom *'], ['nom', 'Nom *'], ['telephone', 'Téléphone', '', 'tel'], ['adresse', 'Adresse', 'full'], ['code_postal', 'Code postal'], ['ville', 'Ville'],
     ['siret', 'SIRET (14 chiffres)'], ['raison_sociale', 'Nom de la société'], ['tva', 'N° de TVA'], ['iban', 'IBAN', 'full'], ['bic', 'BIC'], ['titulaire', 'Titulaire du compte']];
 
   let client = null, user = null;
   let revendeurs = [], apporteurs = [];
-  let vue = 'revendeurs', q = '';
+  let onglet = 'tableau', vue = 'revendeurs', q = '', filtreAbo = 'tous', filtrePro = 'encours', filtreLead = 'tous';
+  let tableau = null, prospects = null, leads = null, annonces = null; // chargés à l'ouverture de leur onglet
+  let pro = null; // fiche prospect ouverte
   let rev = null, app = null; // fiches ouvertes
 
   function toast(msg) {
@@ -59,6 +77,7 @@
       $('#auth').hidden = true;
       $('#compte-email').textContent = 'Connecté : ' + user.email;
       await charger();
+      rafraichir();
     } catch (err) { $('#auth-texte').textContent = err.message; }
   }
   async function charger() {
@@ -67,19 +86,30 @@
     } catch (err) { toast(err.message); }
     afficher();
   }
+  // Données de l'onglet ouvert, rechargées à chaque visite.
+  function rafraichir() {
+    ({ tableau: chargerTableau, prospection: chargerProspects, leads: chargerLeads, annonces: chargerAnnonces }[onglet] || charger)();
+  }
 
-  // ---------- Onglet Commercial ----------
+  // ---------- Onglet Partenaires ----------
   const droitsDe = c => c?.droits || { reseau: false, depot: true, achat: true };
   function carteRevendeur(g) {
     const c = g.config || {}, d = droitsDe(c), i = c.infos || {};
     const comptes = g.comptes || [];
     return `<button type="button" class="card" data-rev="${esc(g.id)}">
       <div class="top"><span class="title">${esc(g.nom)}</span>
-        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${c.droits ? '' : '<span class="badge b-purple">Droits à régler</span>'}</span></div>
+        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${c.droits ? '' : '<span class="badge b-purple">Droits à régler</span>'}${badgeAbo(g)}</span></div>
       <div class="sub">${esc([i.ville, i.telephone, i.siret && 'SIRET ' + i.siret].filter(Boolean).join(' · ') || 'Infos à compléter')}</div>
       <div class="sub">${esc(comptes.map(x => x.email).join(', ') || 'Aucun compte')}${comptes.some(x => x.doit_changer_mdp) ? ' · mot de passe de départ' : ''}</div>
       <div class="adm-droits">${DROITS.map(([k, l]) => `<span class="badge ${d[k] ? 'b-green' : 'b-grey off'}">${l.replace('Rejoindre le réseau Ocaz', 'Réseau Ocaz')}</span>`).join('')}</div>
     </button>`;
+  }
+  function badgeAbo(g) {
+    if (g.demo || g.admin) return '';
+    const a = g.config?.abonnement;
+    if (!a?.statut) return '<span class="badge b-purple">Abonnement à régler</span>';
+    const [l, cls] = ABO[a.statut] || ABO.essai;
+    return `<span class="badge ${cls}">${l}${a.statut === 'essai' && a.debut ? " jusqu'au " + dateFr(finEssai(a.debut)) : ''}</span>`;
   }
   function carteApporteur(a) {
     return `<button type="button" class="card" data-app="${esc(a.email)}">
@@ -91,11 +121,15 @@
     </button>`;
   }
   function afficher() {
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === onglet));
+    ({ tableau: afficherTableau, prospection: afficherProspection, abonnements: afficherAbonnements, leads: afficherLeads, annonces: afficherAnnonces }[onglet] || afficherPartenaires)();
+  }
+  function afficherPartenaires() {
     const liste = vue === 'revendeurs'
       ? revendeurs.filter(g => !q || norm([g.nom, JSON.stringify(g.config?.infos || {}), (g.comptes || []).map(c => c.email).join(' ')].join(' ')).includes(norm(q)))
       : apporteurs.filter(a => !q || norm([a.prenom, a.nom, a.email, a.telephone, a.ville].join(' ')).includes(norm(q)));
     $('#vue').innerHTML = `<div class="ap-page">
-      <div class="adm-tete"><h2>Commercial</h2>
+      <div class="adm-tete"><h2>Partenaires</h2>
         <button type="button" class="primary" id="btn-ajouter">${icon('plus', 18)}<span>${vue === 'revendeurs' ? 'Ajouter un revendeur' : 'Ajouter un apporteur'}</span></button></div>
       <div class="adm-outils"><div class="segmented">
         <button type="button" data-vue="revendeurs" class="${vue === 'revendeurs' ? 'active' : ''}">Revendeurs (${revendeurs.length})</button>
@@ -106,13 +140,335 @@
     </div>`;
   }
 
-  // ---------- Fiche revendeur ----------
-  function ouvrirRevendeur(id) {
+  // ---------- Onglet Abonnements ----------
+  const payants = () => revendeurs.filter(g => !g.demo && !g.admin);
+  const statutDe = g => g.config?.abonnement?.statut || 'aregler';
+  function detailAbo(g) {
+    const a = g.config?.abonnement || {};
+    if (!a.statut) return "Pas encore réglé : ouvre-le pour lancer son essai gratuit.";
+    if (a.statut === 'essai') {
+      const f = finEssai(a.debut || auj()), n = jours(f);
+      return n < 0 ? `Essai terminé le ${dateFr(f)} : passe-le en « Abonné » s'il a payé.` : `Fin de l'essai le ${dateFr(f)} (${n ? 'dans ' + n + ' j' : "aujourd'hui"}), premier paiement ce jour-là.`;
+    }
+    if (a.statut === 'actif') return `Abonné depuis le ${dateFr(finEssai(a.debut || auj()))} · prochain paiement le ${dateFr(prochainPaiement(a.debut || auj()))}`;
+    if (a.statut === 'impaye') return `Paiement en retard${a.maj ? ' depuis le ' + dateFr(a.maj) : ''} : relance-le.`;
+    if (a.statut === 'resilie') return `Résilié${a.fin ? ' le ' + dateFr(a.fin) : ''}.`;
+    return 'Offert : rien à payer.';
+  }
+  // À traiter : impayés, essais qui se terminent dans 7 jours (ou déjà finis), revendeurs sans abonnement réglé.
+  const aTraiter = g => {
+    const a = g.config?.abonnement;
+    return !a?.statut || a.statut === 'impaye' || (a.statut === 'essai' && jours(finEssai(a.debut || auj())) <= 7);
+  };
+  function ligneAbo(g) {
+    const st = statutDe(g);
+    return `<div class="adm-abo-ligne">
+      <button type="button" class="adm-abo-nom" data-rev="${esc(g.id)}"><b>${esc(g.nom)}</b><small>${esc(detailAbo(g))}</small></button>
+      <select data-abo="${esc(g.id)}" aria-label="Statut de l'abonnement de ${esc(g.nom)}">
+        ${st === 'aregler' ? '<option value="" selected>À régler</option>' : ''}
+        ${Object.entries(ABO).map(([k, [l]]) => `<option value="${k}"${st === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    </div>`;
+  }
+  function afficherAbonnements() {
+    const tous = payants();
+    const n = st => tous.filter(g => statutDe(g) === st).length;
+    const actifs = n('actif'), essais = n('essai'), impayes = n('impaye');
+    const partenaires = actifs + essais + impayes + n('offert');
+    const urgents = tous.filter(aTraiter);
+    const FILTRES = [['tous', 'Tous', tous.length], ['actif', 'Abonnés', actifs], ['essai', 'En essai', essais], ['impaye', 'Impayés', impayes],
+      ['resilie', 'Résiliés', n('resilie')], ['offert', 'Offerts', n('offert')], ['aregler', 'À régler', n('aregler')]].filter(([k, , c]) => k === 'tous' || c);
+    if (!FILTRES.some(([k]) => k === filtreAbo)) filtreAbo = 'tous';
+    const liste = tous.filter(g => filtreAbo === 'tous' || statutDe(g) === filtreAbo)
+      .filter(g => !q || norm(g.nom).includes(norm(q)));
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Abonnements</h2><span class="hint">${eur(PRIX)} par mois · premier mois offert · sans engagement</span></div>
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-l">Revenu mensuel</span><span class="kpi-v">${eur(actifs * PRIX)}</span><span class="kpi-s">${actifs} abonné(s) qui paient</span></div>
+        <div class="kpi"><span class="kpi-l">En essai gratuit</span><span class="kpi-v">${essais}</span><span class="kpi-s">${essais ? '+' + eur(essais * PRIX) + " s'ils restent" : 'Aucun en ce moment'}</span></div>
+        <div class="kpi${impayes ? ' negatif' : ''}"><span class="kpi-l">Impayés</span><span class="kpi-v">${impayes}</span><span class="kpi-s">${impayes ? eur(impayes * PRIX) + ' en attente' : 'Tout est à jour'}</span></div>
+        <div class="kpi"><span class="kpi-l">Revenu à ${CAP} garages</span><span class="kpi-v">${eur(CAP * PRIX)}</span><span class="kpi-s">par mois, ${eur(CAP * PRIX * 12)} par an</span></div>
+      </div>
+      <div class="adm-bloc adm-objectifs">
+        <div><span>Objectif ${OBJECTIF} abonnés (avril 2027) : <b>${actifs} / ${OBJECTIF}</b></span>${barre(actifs, OBJECTIF)}</div>
+        <div><span>Cap des ${CAP} garages partenaires : <b>${partenaires} / ${CAP}</b> <small class="hint">(abonnés, essais, impayés et offerts)</small></span>${barre(partenaires, CAP)}</div>
+      </div>
+      ${urgents.length ? `<h3 class="section">À traiter (${urgents.length})</h3><div class="adm-bloc adm-abo-liste">${urgents.map(ligneAbo).join('')}</div>` : ''}
+      <h3 class="section">Tous les revendeurs</h3>
+      <div class="adm-outils"><div class="chips">${FILTRES.map(([k, l, c]) => `<button type="button" class="chip${filtreAbo === k ? ' active' : ''}" data-filtre="${k}">${l} (${c})</button>`).join('')}</div>
+        <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher un revendeur…" value="${esc(q)}" autocomplete="off"></div></div>
+      <div class="adm-bloc adm-abo-liste">${liste.length ? liste.map(ligneAbo).join('')
+        : `<div class="empty"><strong>${tous.length ? 'Aucun résultat' : 'Aucun revendeur payant'}</strong><span>${tous.length ? 'Essaie un autre filtre.' : 'Ajoute-les dans l\'onglet Partenaires.'}</span></div>`}</div>
+      <p class="hint">Mis à jour à la main pour l'instant. Une fois Stripe branché, les statuts changeront tout seuls.</p>
+    </div>`;
+  }
+  async function changerAbo(id, statut, select) {
     const g = revendeurs.find(x => x.id === id);
-    const c = g?.config || {};
-    rev = { id: g?.id || null, infos: { ...(c.infos || {}), nom: c.infos?.nom || g?.nom || '' }, droits: { ...droitsDe(g ? c : { droits: { reseau: false, depot: false, achat: true } }) },
+    if (!g || !statut) return;
+    const c = g.config || {};
+    const a = { debut: auj(), ...(c.abonnement || {}), statut, maj: auj() };
+    if (statut === 'essai' && !c.abonnement?.statut) a.debut = auj();
+    if (statut === 'resilie') a.fin = auj(); else delete a.fin;
+    const config = { ...c, infos: { ...(c.infos || {}), nom: c.infos?.nom || g.nom }, abonnement: a };
+    select.disabled = true;
+    try {
+      await rpc('crm_admin_revendeur_enregistrer', { p_id: id, p_email: '', p_config: config });
+      g.config = config;
+      toast(`${g.nom} : ${ABO[statut][0]}`);
+    } catch (err) { toast(err.message); }
+    afficher();
+  }
+
+  // ---------- Onglet Tableau de bord ----------
+  const ilYa = d => { if (!d) return 'jamais'; const n = Math.floor((Date.now() - new Date(d)) / 864e5); return n <= 0 ? "aujourd'hui" : n === 1 ? 'hier' : `il y a ${n} j`; };
+  const joursDepuis = d => d ? Math.floor((Date.now() - new Date(d)) / 864e5) : Infinity;
+  const kpi = (l, v, s, cls) => `<div class="kpi${cls ? ' ' + cls : ''}"><span class="kpi-l">${l}</span><span class="kpi-v">${v}</span><span class="kpi-s">${s}</span></div>`;
+  const barre = (v, max) => `<div class="adm-barre"><span style="width:${Math.min(100, Math.round(v / max * 100))}%"></span></div>`;
+  function afficherTableau() {
+    if (!tableau) { $('#vue').innerHTML = '<div class="ap-page"><p class="hint">Chargement…</p></div>'; return; }
+    const reels = tableau.garages.filter(g => !g.demo && !g.admin);
+    const partenaires = reels.filter(g => ['essai', 'actif', 'impaye', 'offert'].includes(g.abonnement));
+    const actifs = reels.filter(g => g.abonnement === 'actif').length;
+    const endormis = partenaires.filter(g => joursDepuis(g.derniere_connexion) >= 14);
+    const attente = reels.filter(g => g.leads_attente > 0);
+    const signes = prospects ? prospects.filter(p => p.etape === 'signe').length : null;
+    const ligne = g => `<tr data-rev="${esc(g.id)}"><td><b>${esc(g.nom)}</b>${g.demo ? ' <span class="badge b-orange">Démo</span>' : ''}${g.admin ? ' <span class="badge b-grey">Ton garage</span>' : ''}
+        ${g.abonnement && ABO[g.abonnement] ? ` <span class="badge ${ABO[g.abonnement][1]}">${ABO[g.abonnement][0]}</span>` : ''}</td>
+      <td>${ilYa(g.derniere_connexion)}</td><td>${g.stock}</td><td>${g.en_ligne}</td><td>${g.offres_30j}</td><td>${g.ventes_30j}</td>
+      <td>${g.leads_30j}${g.leads_attente ? ` <span class="badge b-red">${g.leads_attente} en attente</span>` : ''}</td></tr>`;
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Tableau de bord</h2><button type="button" id="btn-actualiser">Actualiser</button></div>
+      <div class="kpis">
+        ${kpi('Garages partenaires', partenaires.length, `${actifs} abonné(s) · objectif ${CAP}`)}
+        ${kpi('Revenu mensuel', eur(actifs * PRIX), `${eur(CAP * PRIX)} à ${CAP} garages`)}
+        ${kpi('Leads (30 jours)', tableau.leads_30j, `${tableau.ventes_reseau_30j} vente(s) grâce au réseau`)}
+        ${kpi('Apporteurs actifs', tableau.apporteurs, 'qui envoient des clients')}
+      </div>
+      <div class="adm-bloc adm-objectifs">
+        <div><span>Vers les ${CAP} garages partenaires : <b>${partenaires.length} / ${CAP}</b></span>${barre(partenaires.length, CAP)}</div>
+        ${signes != null ? `<div><span>Prospection : <b>${signes}</b> signé(s) sur ${prospects.length} garage(s) démarché(s)</span>${barre(signes, Math.max(prospects.length, 1))}</div>` : ''}
+      </div>
+      ${endormis.length || attente.length ? `<h3 class="section">À surveiller</h3><div class="adm-bloc">
+        ${endormis.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>Pas connecté depuis ${joursDepuis(g.derniere_connexion) === Infinity ? 'le début' : joursDepuis(g.derniere_connexion) + ' jours'} : appelle-le avant qu'il résilie.</small></span></div>`).join('')}
+        ${attente.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>${g.leads_attente} lead(s) pas encore pris en charge.</small></span></div>`).join('')}
+      </div>` : ''}
+      <h3 class="section">Activité des garages</h3>
+      <div class="adm-table-scroll"><table class="adm-table">
+        <thead><tr><th>Garage</th><th>Dernière connexion</th><th>Stock</th><th>Sur le réseau</th><th>Offres 30 j</th><th>Ventes 30 j</th><th>Leads 30 j</th></tr></thead>
+        <tbody>${tableau.garages.map(ligne).join('') || '<tr><td colspan="7">Aucun garage.</td></tr>'}</tbody></table></div>
+    </div>`;
+  }
+  async function chargerTableau() {
+    try { [tableau, prospects] = await Promise.all([rpc('crm_admin_tableau'), prospects ? prospects : rpc('crm_admin_prospects').catch(() => null)]); }
+    catch (err) { toast(err.message); tableau = { garages: [], apporteurs: 0, leads_30j: 0, ventes_reseau_30j: 0 }; }
+    if (onglet === 'tableau') afficher();
+  }
+
+  // ---------- Onglet Prospection ----------
+  const ETAPES = { a_contacter: ['À contacter', 'b-grey'], appele: ['Appelé', 'b-blue'], demo_prevue: ['Démo prévue', 'b-orange'], demo_faite: ['Démo faite', 'b-orange'],
+    essai: ['En essai', 'b-purple'], signe: ['Signé', 'b-green'], pas_interesse: ['Pas intéressé', 'b-red'] };
+  const enCours = p => !['signe', 'pas_interesse'].includes(p.etape);
+  function lignePro(p) {
+    const r = p.relance && enCours(p) ? jours(p.relance) : null;
+    return `<div class="adm-abo-ligne">
+      <button type="button" class="adm-abo-nom" data-pro="${esc(p.id)}"><b>${esc(p.nom)}</b>
+        <small>${esc([p.ville, p.telephone, p.contact].filter(Boolean).join(' · ') || 'Pas de coordonnées')}${r != null ? ` · <span class="${r <= 0 ? 'adm-retard' : ''}">relance ${r < 0 ? 'en retard (' + dateFr(p.relance) + ')' : r === 0 ? "aujourd'hui" : 'le ' + dateFr(p.relance)}</span>` : ''}</small>
+        ${p.note ? `<small class="adm-note">${esc(p.note.split('\n')[0])}</small>` : ''}</button>
+      ${p.telephone ? `<a class="chip" href="tel:${esc(p.telephone.replace(/\s/g, ''))}">Appeler</a>` : ''}
+      <select data-etape="${esc(p.id)}" aria-label="Étape de ${esc(p.nom)}">${Object.entries(ETAPES).map(([k, [l]]) => `<option value="${k}"${p.etape === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    </div>`;
+  }
+  function afficherProspection() {
+    if (!prospects) { $('#vue').innerHTML = '<div class="ap-page"><p class="hint">Chargement…</p></div>'; return; }
+    const n = e => prospects.filter(p => p.etape === e).length;
+    const aRelancer = prospects.filter(p => enCours(p) && p.relance && jours(p.relance) <= 0);
+    const FILTRES = [['tous', 'Tous', prospects.length], ['encours', 'En cours', prospects.filter(enCours).length], ...Object.entries(ETAPES).map(([k, [l]]) => [k, l, n(k)])].filter(([k, , c]) => k === 'tous' || c);
+    if (!FILTRES.some(([k]) => k === filtrePro)) filtrePro = 'tous';
+    const liste = prospects.filter(p => filtrePro === 'tous' || (filtrePro === 'encours' ? enCours(p) : p.etape === filtrePro))
+      .filter(p => !q || norm([p.nom, p.ville, p.telephone, p.email, p.contact, p.note].join(' ')).includes(norm(q)));
+    const signes = n('signe'), demos = n('demo_faite') + n('essai') + signes;
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Prospection</h2><span class="chips">
+        <button type="button" id="btn-importer">Importer un fichier CSV</button>
+        <button type="button" class="primary" id="btn-pro-ajouter">${icon('plus', 18)}<span>Ajouter un garage</span></button></span></div>
+      ${prospects.length ? `<div class="kpis">
+        ${kpi('Garages à démarcher', prospects.length, `${prospects.filter(enCours).length} en cours`)}
+        ${kpi('Démos faites', demos, prospects.length ? Math.round(demos / prospects.length * 100) + ' % des garages' : '')}
+        ${kpi('Signés', signes, demos ? Math.round(signes / demos * 100) + ' % des démos' : 'objectif ' + OBJECTIF + ' abonnés')}
+        ${kpi('À relancer', aRelancer.length, aRelancer.length ? "aujourd'hui ou en retard" : 'rien en retard', aRelancer.length ? 'negatif' : '')}
+      </div>
+      <div class="adm-entonnoir">${Object.entries(ETAPES).map(([k, [l, cls]]) => `<button type="button" class="adm-etape" data-filtre-pro="${k}"><span class="badge ${cls}">${l}</span><b>${n(k)}</b></button>`).join('')}</div>` : ''}
+      ${aRelancer.length ? `<h3 class="section">À relancer (${aRelancer.length})</h3><div class="adm-bloc adm-abo-liste">${aRelancer.map(lignePro).join('')}</div>` : ''}
+      <h3 class="section">Tous les garages</h3>
+      <div class="adm-outils"><div class="chips">${FILTRES.map(([k, l, c]) => `<button type="button" class="chip${filtrePro === k ? ' active' : ''}" data-filtre-pro="${k}">${l} (${c})</button>`).join('')}</div>
+        <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher un garage…" value="${esc(q)}" autocomplete="off"></div></div>
+      <div class="adm-bloc adm-abo-liste">${liste.length ? liste.map(lignePro).join('')
+        : `<div class="empty"><strong>${prospects.length ? 'Aucun résultat' : 'Aucun garage à démarcher'}</strong><span>${prospects.length ? 'Essaie un autre filtre.' : 'Importe ta liste (le fichier prospects.csv des 60 marchands) ou ajoute un garage.'}</span></div>`}</div>
+    </div>`;
+  }
+  async function chargerProspects() {
+    try { prospects = await rpc('crm_admin_prospects'); } catch (err) { toast(err.message); prospects = prospects || []; }
+    if (onglet === 'prospection') afficher();
+  }
+  async function enregistrerProspect(p, msg) {
+    const id = await rpc('crm_admin_prospect_enregistrer', { p });
+    await chargerProspects();
+    if (msg) toast(msg);
+    return id;
+  }
+  function ouvrirProspect(id, base) {
+    pro = id ? { ...prospects.find(p => p.id === id) } : { etape: 'a_contacter', ...(base || {}) };
+    $('#pro-titre').textContent = id ? pro.nom : 'Ajouter un garage à démarcher';
+    $('#pro-suppr').hidden = !id;
+    const g = pro.entreprise_id && revendeurs.find(x => x.id === pro.entreprise_id);
+    const ch = (k, l, cls, type) => `<div class="field ${cls || ''}"><label for="pf-${k}">${l}</label><input id="pf-${k}" data-pf="${k}" type="${type || 'text'}" value="${esc(pro[k] || '')}" autocomplete="off"></div>`;
+    $('#pro-body').innerHTML = `
+      <div class="grid">${ch('nom', 'Nom du garage *', 'full')}${ch('ville', 'Ville')}${ch('contact', 'Personne à voir')}${ch('telephone', 'Téléphone', '', 'tel')}${ch('email', 'Email', '', 'email')}</div>
+      <h3 class="section">Suivi</h3>
+      <div class="grid"><div class="field"><label for="pf-etape">Étape</label><select id="pf-etape" data-pf="etape">${Object.entries(ETAPES).map(([k, [l]]) => `<option value="${k}"${pro.etape === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        ${ch('relance', 'Prochaine relance', '', 'date')}
+        <div class="field full"><label for="pf-note">Notes (appels, objections, ce qui l'intéresse)</label><textarea id="pf-note" data-pf="note" rows="5">${esc(pro.note || '')}</textarea></div></div>
+      ${id ? `<div class="adm-bloc">${g ? `<div class="adm-compte"><span>Compte revendeur créé<small>${esc(g.nom)}</small></span><button type="button" class="chip" data-voir-rev="${esc(g.id)}">Voir sa fiche</button></div>`
+        : `<div class="adm-compte"><span>Il a dit oui ?<small>Crée son compte revendeur : ses infos sont reprises et son essai gratuit démarre.</small></span><button type="button" class="chip" id="pro-convertir">Créer son compte</button></div>`}</div>` : ''}`;
+    $('#dlg-pro').showModal();
+  }
+  function lireProspect() {
+    document.querySelectorAll('#pro-body [data-pf]').forEach(i => { pro[i.dataset.pf] = i.value.trim(); });
+    return pro;
+  }
+  async function validerProspect() {
+    const p = lireProspect();
+    if (!p.nom) { toast('Le nom du garage est obligatoire.'); $('#pf-nom').focus(); return null; }
+    const btn = $('#pro-ok');
+    btn.disabled = true;
+    try { const id = await enregistrerProspect(p); $('#dlg-pro').close(); return id; } catch (err) { toast(err.message); return null; }
+    finally { btn.disabled = false; }
+  }
+  // Fichier CSV : celui de l'appli de relance (entreprise, telephone, email, lot, statut, commentaire, date) ou un tableur
+  // avec des colonnes nom / ville / téléphone / email. « GARAGE (Ville) » est séparé en nom et ville.
+  function lireCsv(txt) {
+    const sep = (txt.split('\n')[0].match(/;/g) || []).length > (txt.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+    const rows = []; let row = [], f = '', dq = false;
+    for (let i = 0; i < txt.length; i++) {
+      const c = txt[i];
+      if (dq) { if (c === '"' && txt[i + 1] === '"') { f += '"'; i++; } else if (c === '"') dq = false; else f += c; }
+      else if (c === '"') dq = true;
+      else if (c === sep) { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && txt[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    const tete = (rows.shift() || []).map(h => norm(h).trim());
+    const col = (...noms) => tete.findIndex(h => noms.includes(h));
+    const iNom = col('entreprise', 'nom', 'garage', 'raison sociale'), iVille = col('ville', 'commune'), iTel = col('telephone', 'tel', 'téléphone'),
+      iMail = col('email', 'mail', 'e-mail'), iLot = col('lot'), iSt = col('statut', 'etape'), iCom = col('commentaire', 'note', 'notes');
+    if (iNom < 0) throw new Error('Colonne « entreprise » ou « nom » introuvable dans le fichier.');
+    const ST = { a_appeler: 'a_contacter', interesse: 'appele', pas_interesse: 'pas_interesse' };
+    return rows.filter(r => (r[iNom] || '').trim()).map(r => {
+      let nom = r[iNom].trim(), ville = iVille >= 0 ? (r[iVille] || '').trim() : '';
+      const m = nom.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+      if (m && !ville) { nom = m[1]; ville = m[2]; }
+      const st = iSt >= 0 ? (r[iSt] || '').trim() : '';
+      return { nom, ville, telephone: iTel >= 0 ? (r[iTel] || '').trim() : '', email: iMail >= 0 ? (r[iMail] || '').trim() : '',
+        lot: iLot >= 0 ? (r[iLot] || '').trim() : '', etape: ST[st] || st, note: iCom >= 0 ? (r[iCom] || '').trim() : '' };
+    });
+  }
+  async function importer(fichier) {
+    try {
+      const liste = lireCsv(await fichier.text());
+      if (!liste.length) { toast('Aucun garage trouvé dans ce fichier.'); return; }
+      const n = await rpc('crm_admin_prospects_importer', { p: liste });
+      await chargerProspects();
+      toast(`${n} garage(s) ajouté(s)${liste.length - n ? `, ${liste.length - n} déjà présent(s)` : ''}`);
+    } catch (err) { toast(err.message); }
+  }
+
+  // ---------- Onglet Leads réseau ----------
+  const LEADS = { nouveau: ['Nouveau', 'b-orange'], en_cours: ['Pris en charge', 'b-blue'], vendu: ['Vendu', 'b-green'], perdu: ['Perdu', 'b-grey'] };
+  function afficherLeads() {
+    if (!leads) { $('#vue').innerHTML = '<div class="ap-page"><p class="hint">Chargement…</p></div>'; return; }
+    const reels = leads.filter(l => !l.demo);
+    const n = st => reels.filter(l => l.statut === st).length;
+    const vendus = reels.filter(l => l.statut === 'vendu');
+    const coms = vendus.reduce((s, l) => s + Number(l.commission_finale ?? l.commission ?? 0), 0);
+    const aPayer = vendus.filter(l => !l.payee).reduce((s, l) => s + Number(l.commission_finale ?? l.commission ?? 0), 0);
+    const oublies = reels.filter(l => l.statut === 'nouveau' && joursDepuis(l.cree_le) >= 2);
+    const FILTRES = [['tous', 'Tous', leads.length], ...Object.entries(LEADS).map(([k, [l]]) => [k, l, leads.filter(x => x.statut === k).length])].filter(([k, , c]) => k === 'tous' || c);
+    if (!FILTRES.some(([k]) => k === filtreLead)) filtreLead = 'tous';
+    const liste = leads.filter(l => filtreLead === 'tous' || l.statut === filtreLead)
+      .filter(l => !q || norm([l.garage, l.apporteur, l.vehicule, l.client, l.numero].join(' ')).includes(norm(q)));
+    const ligne = l => `<div class="adm-abo-ligne"><div class="adm-abo-nom"><b>${esc(l.vehicule || 'Véhicule')} · ${esc(l.garage)}</b>
+        <small>N° ${esc(l.numero)} du ${dateFr(l.cree_le)} · client ${esc(l.client)} · apporteur ${esc(l.apporteur || '?')}${l.demo ? ' · démo' : ''}</small>
+        <small>${l.statut === 'nouveau' ? `Envoyé ${ilYa(l.cree_le)}, pas encore pris en charge` : l.statut === 'en_cours' ? `Pris en charge ${ilYa(l.pris_le)}` : l.statut === 'vendu' ? `Vendu · commission ${eur(Number(l.commission_finale ?? l.commission ?? 0))}${l.payee ? ' payée' : ' à verser'}` : `Perdu${l.motif ? ' : ' + esc(l.motif) : ''}`}</small></div>
+      <span class="badge ${LEADS[l.statut]?.[1] || 'b-grey'}">${LEADS[l.statut]?.[0] || esc(l.statut)}</span></div>`;
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Leads réseau</h2><button type="button" id="btn-actualiser">Actualiser</button></div>
+      <div class="kpis">
+        ${kpi('Leads envoyés', reels.length, `${n('nouveau') + n('en_cours')} en cours`)}
+        ${kpi('Ventes', vendus.length, reels.length ? Math.round(vendus.length / reels.length * 100) + ' % des leads' : 'aucun lead')}
+        ${kpi('Commissions', eur(coms), aPayer ? eur(aPayer) + ' pas encore versées' : 'toutes versées')}
+        ${kpi('Sans réponse', oublies.length, 'depuis 2 jours ou plus', oublies.length ? 'negatif' : '')}
+      </div>
+      ${oublies.length ? `<h3 class="section">Sans réponse du garage (${oublies.length})</h3><p class="hint">Un apporteur qui attend se décourage : appelle le garage.</p><div class="adm-bloc adm-abo-liste">${oublies.map(ligne).join('')}</div>` : ''}
+      <h3 class="section">Tous les leads</h3>
+      <div class="adm-outils"><div class="chips">${FILTRES.map(([k, l, c]) => `<button type="button" class="chip${filtreLead === k ? ' active' : ''}" data-filtre-lead="${k}">${l} (${c})</button>`).join('')}</div>
+        <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Garage, apporteur, véhicule…" value="${esc(q)}" autocomplete="off"></div></div>
+      <div class="adm-bloc adm-abo-liste">${liste.length ? liste.map(ligne).join('') : `<div class="empty"><strong>${leads.length ? 'Aucun résultat' : 'Aucun lead pour l\'instant'}</strong><span>${leads.length ? 'Essaie un autre filtre.' : 'Ils arrivent quand un apporteur envoie un client à un garage du réseau.'}</span></div>`}</div>
+      <p class="hint">Les coordonnées des clients restent chez le garage : ici tu ne vois que le prénom et l'initiale.</p>
+    </div>`;
+  }
+  async function chargerLeads() {
+    try { leads = await rpc('crm_admin_leads'); } catch (err) { toast(err.message); leads = leads || []; }
+    if (onglet === 'leads') afficher();
+  }
+
+  // ---------- Onglet Annonces ----------
+  const CIBLES = { tous: 'Tout le monde', revendeurs: 'Les revendeurs', apporteurs: 'Les apporteurs' };
+  function afficherAnnonces() {
+    if (!annonces) { $('#vue').innerHTML = '<div class="ap-page"><p class="hint">Chargement…</p></div>'; return; }
+    const enLigne = a => a.actif && (!a.fin || a.fin >= auj());
+    $('#vue').innerHTML = `<div class="ap-page">
+      <div class="adm-tete"><h2>Annonces</h2></div>
+      <p class="hint">Un bandeau en haut de l'appli des partenaires, à leur prochaine ouverture : nouveauté, maintenance, conseil du mois… Chacun peut le fermer.</p>
+      <div class="adm-bloc">
+        <div class="grid">
+          <div class="field full"><label for="an-titre">Titre *</label><input id="an-titre" maxlength="140" placeholder="Nouveau : la messagerie entre partenaires" autocomplete="off"></div>
+          <div class="field full"><label for="an-texte">Message</label><textarea id="an-texte" rows="3" maxlength="2000" placeholder="Quelques lignes, simples et utiles."></textarea></div>
+          <div class="field"><label for="an-cible">Pour</label><select id="an-cible">${Object.entries(CIBLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+          <div class="field"><label for="an-fin">Afficher jusqu'au (facultatif)</label><input id="an-fin" type="date"></div>
+        </div>
+        <div class="adm-publier"><button type="button" class="primary" id="btn-publier">Publier l'annonce</button></div>
+      </div>
+      <h3 class="section">Annonces publiées</h3>
+      <div class="adm-bloc adm-abo-liste">${annonces.length ? annonces.map(a => `<div class="adm-abo-ligne"><div class="adm-abo-nom"><b>${esc(a.titre)}</b>
+          ${a.texte ? `<small>${esc(a.texte)}</small>` : ''}
+          <small>${CIBLES[a.cible] || ''} · publiée le ${dateFr(a.cree_le)}${a.fin ? ' · jusqu\'au ' + dateFr(a.fin) : ''}</small></div>
+        <span class="badge ${enLigne(a) ? 'b-green' : 'b-grey'}">${enLigne(a) ? 'En ligne' : a.actif ? 'Terminée' : 'Retirée'}</span>
+        <span class="chips"><button type="button" class="chip" data-an-actif="${esc(a.id)}">${a.actif ? 'Retirer' : 'Remettre'}</button>
+          <button type="button" class="chip" data-an-suppr="${esc(a.id)}" aria-label="Supprimer l'annonce">✕</button></span></div>`).join('')
+        : '<div class="empty"><strong>Aucune annonce</strong><span>Ta première annonce apparaîtra ici.</span></div>'}</div>
+    </div>`;
+  }
+  async function chargerAnnonces() {
+    try { annonces = await rpc('crm_admin_annonces'); } catch (err) { toast(err.message); annonces = annonces || []; }
+    if (onglet === 'annonces') afficher();
+  }
+  async function publierAnnonce() {
+    const a = { titre: $('#an-titre').value.trim(), texte: $('#an-texte').value.trim(), cible: $('#an-cible').value, fin: $('#an-fin').value, actif: true };
+    if (!a.titre) { toast('Donne un titre à ton annonce.'); $('#an-titre').focus(); return; }
+    $('#btn-publier').disabled = true;
+    try { await rpc('crm_admin_annonce_enregistrer', { p: a }); toast('Annonce publiée'); await chargerAnnonces(); }
+    catch (err) { toast(err.message); $('#btn-publier').disabled = false; }
+  }
+
+  // ---------- Fiche revendeur ----------
+  // base : prospect qui vient de dire oui (ses coordonnées sont reprises).
+  function ouvrirRevendeur(id, base) {
+    const g = revendeurs.find(x => x.id === id);
+    const c = g?.config || (base ? { infos: { nom: base.nom, ville: base.ville, telephone: base.telephone, email: base.email } } : {});
+    rev = { id: g?.id || null, prospectId: base?.id || null, email: base?.email || '', infos: { ...(c.infos || {}), nom: c.infos?.nom || g?.nom || '' }, droits: { ...droitsDe(g ? c : { droits: { reseau: false, depot: false, achat: true } }) },
       reseau: { commissionType: 'fixe', commissionValeur: 300, commissionMin: 0, ...(c.reseau || {}) },
-      packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo };
+      packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo, admin: !!g?.admin,
+      abonnement: { statut: 'essai', debut: auj(), ...(c.abonnement || {}) } };
     $('#rev-titre').textContent = g ? g.nom : 'Ajouter un revendeur';
     rendreRevendeur();
     $('#dlg-rev').showModal();
@@ -131,6 +487,13 @@
         ${r.demo ? '' : `<div class="field"><label for="rev-email">Ajouter un compte (email)</label><input id="rev-email" type="email" autocomplete="off" placeholder="collegue@garage.re" value="${esc(r.email || '')}"></div>`}</div>`
       : `<div class="field"><label for="rev-email">Email de connexion *</label><input id="rev-email" type="email" autocomplete="off" placeholder="contact@garage.re" value="${esc(r.email || '')}">
           <span class="hint">Il se connecte avec cet email et le mot de passe <b>12345678</b>, puis choisit le sien.</span></div>`}
+
+      ${r.demo || r.admin ? '' : `<h3 class="section">Abonnement (${eur(PRIX)} par mois)</h3>
+      <p class="hint">Premier mois offert, sans engagement. À mettre à jour à la main pour l'instant (Stripe le fera tout seul plus tard).</p>
+      <div class="grid"><div class="field"><label for="abo-statut">Statut</label><select id="abo-statut">
+          ${Object.entries(ABO).map(([k, [l]]) => `<option value="${k}"${r.abonnement.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label for="abo-debut">Début de l'abonnement</label><input id="abo-debut" type="date" value="${esc(r.abonnement.debut)}">
+          <span class="hint">Fin de l'essai : ${dateFr(finEssai(r.abonnement.debut))}, premier paiement ce jour-là.</span></div></div>`}
 
       <h3 class="section">Droits activés</h3>
       <div class="adm-bloc">${DROITS.map(([k, l, aide]) => `<label class="check"><input type="checkbox" data-droit="${k}"${r.droits[k] ? ' checked' : ''}><span><b>${l}</b><br><small class="hint">${aide}</small></span></label>
@@ -153,6 +516,11 @@
   }
   function lireRevendeur() {
     rev.email = ($('#rev-email')?.value || '').trim().toLowerCase();
+    if ($('#abo-statut')) {
+      const statut = $('#abo-statut').value;
+      if (statut !== rev.abonnement.statut) { rev.abonnement.maj = auj(); if (statut === 'resilie') rev.abonnement.fin = auj(); else delete rev.abonnement.fin; }
+      rev.abonnement = { ...rev.abonnement, statut, debut: $('#abo-debut').value || auj() };
+    }
     document.querySelectorAll('#rev-body [data-ri]').forEach(i => { rev.infos[i.dataset.ri] = i.value.trim(); });
     document.querySelectorAll('#rev-body [data-droit]').forEach(i => { rev.droits[i.dataset.droit] = i.checked; });
     document.querySelectorAll('#rev-body [data-rc]').forEach(i => { rev.reseau[i.dataset.rc] = i.dataset.rc === 'commissionType' ? i.value : Number(i.value) || 0; });
@@ -169,11 +537,15 @@
     if (rev.infos.siret && !/^\d{14}$/.test(rev.infos.siret.replace(/\s/g, ''))) { toast('Le SIRET doit faire 14 chiffres.'); return; }
     if (rev.packs.some(p => !p.nom)) { toast('Donne un nom à chaque pack (ou supprime-le).'); return; }
     const config = { infos: rev.infos, droits: rev.droits, reseau: rev.reseau, packs: rev.packs };
+    if (!rev.demo && !rev.admin) config.abonnement = rev.abonnement;
     const btn = $('#rev-ok');
     btn.disabled = true;
     try {
-      await rpc('crm_admin_revendeur_enregistrer', { p_id: rev.id, p_email: email, p_config: config });
+      const r = await rpc('crm_admin_revendeur_enregistrer', { p_id: rev.id, p_email: email, p_config: config });
       $('#dlg-rev').close();
+      // Prospect converti : il passe « En essai » et reste relié à son compte.
+      const p = rev.prospectId && prospects?.find(x => x.id === rev.prospectId);
+      if (p && r?.id) await enregistrerProspect({ ...p, entreprise_id: r.id, etape: p.etape === 'signe' ? 'signe' : 'essai' }).catch(err => toast(err.message));
       toast(email ? `Compte créé : ${email} / 12345678` : 'Revendeur enregistré');
       await charger();
     } catch (err) { toast(err.message); }
@@ -233,7 +605,11 @@
 
   // ---------- Démarrage ----------
   function init() {
-    document.querySelectorAll('[data-tab]').forEach(b => { b.innerHTML = icon('clients', 18) + '<span>' + b.textContent + '</span>'; });
+    document.querySelectorAll('[data-tab]').forEach(b => {
+      const ic = { tableau: 'donnees', prospection: 'planning', partenaires: 'clients', abonnements: 'abonnements', leads: 'leads', annonces: 'annonce' }[b.dataset.tab];
+      b.innerHTML = icon(ic, b.closest('#bottom-tabs') ? 22 : 18) + '<span>' + b.textContent + '</span>';
+      b.addEventListener('click', () => { onglet = b.dataset.tab; q = ''; afficher(); window.scrollTo(0, 0); rafraichir(); });
+    });
     $('#btn-menu').innerHTML = icon('reglages', 20);
     $('#btn-menu').addEventListener('click', () => $('#dlg-compte').showModal());
     $('#compte-fermer').addEventListener('click', () => $('#dlg-compte').close());
@@ -251,11 +627,44 @@
     $('#vue').addEventListener('click', e => {
       const v = e.target.closest('[data-vue]');
       if (v) { vue = v.dataset.vue; q = ''; afficher(); return; }
+      const f = e.target.closest('[data-filtre]');
+      if (f) { filtreAbo = f.dataset.filtre; afficher(); return; }
+      const fp = e.target.closest('[data-filtre-pro]');
+      if (fp) { filtrePro = fp.dataset.filtrePro; afficher(); return; }
+      const fl = e.target.closest('[data-filtre-lead]');
+      if (fl) { filtreLead = fl.dataset.filtreLead; afficher(); return; }
+      if (e.target.closest('#btn-actualiser')) { rafraichir(); return; }
+      if (e.target.closest('#btn-pro-ajouter')) { ouvrirProspect(null); return; }
+      if (e.target.closest('#btn-importer')) { $('#pro-fichier').click(); return; }
+      if (e.target.closest('#btn-publier')) { publierAnnonce(); return; }
+      const pr = e.target.closest('[data-pro]');
+      if (pr) { ouvrirProspect(pr.dataset.pro); return; }
+      const aa = e.target.closest('[data-an-actif]');
+      if (aa) {
+        const a = annonces.find(x => x.id === aa.dataset.anActif);
+        rpc('crm_admin_annonce_enregistrer', { p: { ...a, actif: !a.actif } }).then(chargerAnnonces, err => toast(err.message));
+        return;
+      }
+      const as = e.target.closest('[data-an-suppr]');
+      if (as) {
+        if (!confirm('Supprimer cette annonce ?')) return;
+        rpc('crm_admin_annonce_supprimer', { p_id: as.dataset.anSuppr }).then(chargerAnnonces, err => toast(err.message));
+        return;
+      }
       if (e.target.closest('#btn-ajouter')) { if (vue === 'revendeurs') ouvrirRevendeur(null); else ouvrirApporteur(null); return; }
       const r = e.target.closest('[data-rev]');
       if (r) { ouvrirRevendeur(r.dataset.rev); return; }
       const a = e.target.closest('[data-app]');
       if (a) ouvrirApporteur(a.dataset.app);
+    });
+    $('#vue').addEventListener('change', e => {
+      if (e.target.dataset.abo) changerAbo(e.target.dataset.abo, e.target.value, e.target);
+      const pid = e.target.dataset.etape;
+      if (pid) {
+        const p = prospects.find(x => x.id === pid);
+        e.target.disabled = true;
+        enregistrerProspect({ ...p, etape: e.target.value }, `${p.nom} : ${ETAPES[e.target.value][0]}`).catch(err => { toast(err.message); afficher(); });
+      }
     });
     $('#vue').addEventListener('input', e => {
       if (e.target.id !== 'adm-q') return;
@@ -266,6 +675,7 @@
     });
     $('#rev-body').addEventListener('change', e => {
       if (e.target.dataset.droit === 'reseau') $('#rev-com').hidden = !e.target.checked;
+      if (e.target.id === 'abo-debut') { lireRevendeur(); rendreRevendeur(); }
     });
     $('#rev-body').addEventListener('click', async e => {
       if (e.target.id === 'rev-pack-ajouter') { lireRevendeur(); rev.packs.push({ id: nouvelId(), nom: '', montant: '', coche: false }); rendreRevendeur(); return; }
@@ -288,8 +698,22 @@
       }
     });
     $('#rev-ok').addEventListener('click', enregistrerRevendeur);
+    $('#pro-ok').addEventListener('click', validerProspect);
+    $('#pro-fichier').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importer(f); });
+    $('#pro-suppr').addEventListener('click', async () => {
+      if (!confirm(`Supprimer ${pro.nom} de la prospection ?`)) return;
+      try { await rpc('crm_admin_prospect_supprimer', { p_id: pro.id }); $('#dlg-pro').close(); await chargerProspects(); } catch (err) { toast(err.message); }
+    });
+    $('#pro-body').addEventListener('click', async e => {
+      const voir = e.target.dataset.voirRev;
+      if (voir) { $('#dlg-pro').close(); ouvrirRevendeur(voir); return; }
+      if (e.target.id === 'pro-convertir') {
+        const id = await validerProspect();
+        if (id) ouvrirRevendeur(null, prospects.find(x => x.id === id));
+      }
+    });
     $('#app-ok').addEventListener('click', enregistrerApporteur);
-    ['rev', 'app'].forEach(k => {
+    ['rev', 'app', 'pro'].forEach(k => {
       $(`#${k}-fermer`).addEventListener('click', () => $(`#dlg-${k}`).close());
       $(`#${k}-annuler`).addEventListener('click', () => $(`#dlg-${k}`).close());
     });
