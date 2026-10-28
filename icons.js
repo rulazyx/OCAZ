@@ -69,18 +69,4 @@ const ILLUS = {
     <path d="M80 72l4-6h34l4 6z" fill="var(--illus-card)" opacity=".85"/>
     <rect x="86" y="104" width="28" height="10" rx="2" fill="var(--illus-card)" stroke="var(--text)" stroke-width="1.5"/>
   </svg>`,
-  planning: `<svg viewBox="0 0 200 140" aria-hidden="true">
-    <ellipse cx="100" cy="128" rx="70" ry="7" fill="var(--illus-shadow)"/>
-    <rect x="44" y="20" width="112" height="100" rx="12" fill="var(--illus-card)" stroke="var(--line)"/>
-    <path d="M44 32a12 12 0 0 1 12-12h88a12 12 0 0 1 12 12v12H44z" fill="var(--primary)"/>
-    <rect x="70" y="12" width="6" height="18" rx="3" fill="var(--text)"/><rect x="124" y="12" width="6" height="18" rx="3" fill="var(--text)"/>
-    <g fill="var(--illus-soft)">
-      <rect x="58" y="56" width="18" height="14" rx="3"/><rect x="82" y="56" width="18" height="14" rx="3"/><rect x="106" y="56" width="18" height="14" rx="3"/><rect x="130" y="56" width="14" height="14" rx="3"/>
-      <rect x="58" y="78" width="18" height="14" rx="3"/><rect x="106" y="78" width="18" height="14" rx="3"/><rect x="130" y="78" width="14" height="14" rx="3"/>
-      <rect x="58" y="100" width="18" height="12" rx="3"/><rect x="82" y="100" width="18" height="12" rx="3"/>
-    </g>
-    <rect x="82" y="78" width="18" height="14" rx="3" fill="var(--accent)"/>
-    <circle cx="150" cy="104" r="20" fill="var(--illus-card)" stroke="var(--text)" stroke-width="3"/>
-    <path d="M150 93v11l7 5" fill="none" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
-  </svg>`,
 };

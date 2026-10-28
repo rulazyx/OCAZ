@@ -4,6 +4,16 @@
 
 const STORAGE_KEY = 'crmzx-v1';
 
+// Charge un fichier JS seulement la première fois qu'on en a besoin (QR code, données de démo…).
+const scriptsCharges = {};
+const chargerScript = src => scriptsCharges[src] ||= new Promise((ok, ko) => {
+  const s = document.createElement('script');
+  s.src = src;
+  s.onload = ok;
+  s.onerror = () => { delete scriptsCharges[src]; ko(new Error('Chargement impossible : vérifie la connexion.')); };
+  document.head.append(s);
+});
+
 const db = {
   data: { clients: [], vehicules: [], commandes: [], planning: [], seq: 0 },
   load() {
@@ -146,17 +156,6 @@ function alerteRecherche(v) {
   const cs = clientsQuiCherchent(v);
   if (cs.length) toast(`🔎 ${cs.length} client(s) cherchent ce véhicule : ${cs.map(clientNom).join(', ')}`);
 }
-const TYPES_RDV = { 'Essai': 'b-blue', 'Expertise reprise': 'b-purple', 'Vente / livraison': 'b-green', 'Relance client': 'b-orange', 'Rendez-vous': 'b-blue', 'Autre': 'b-grey' };
-const FILTRES_RDV = {
-  'Semaine': () => true,
-  'À venir': r => !r.fait && r.date >= today(),
-  'En retard': r => !r.fait && r.date < today(),
-  'Faits': r => !!r.fait,
-  'Tous': () => true,
-};
-let filtreRdv = 'Semaine';
-// Lundi de la semaine affichée dans le calendrier.
-let semaine = (() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; })();
 const ajouterJours = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 // Une vente commence par une offre ; validée, elle devient une commande.
 // Parcours : Offre → (acceptée) Commande → (validée) Livraison → Livrée, ou Annulée à tout moment.
@@ -384,43 +383,6 @@ const TABS = {
       repriseSuitCommande({ ...o, statut: 'Annulée' });
     },
   },
-
-  planning: {
-    titre: 'rendez-vous', titreNouveau: 'Nouveau rendez-vous',
-    fields: [
-      { k: 'type', l: 'Type', type: 'select', options: Object.keys(TYPES_RDV), def: 'Essai' },
-      { k: 'date', l: 'Date', type: 'date', def: today, required: true },
-      { k: 'heure', l: 'Heure', type: 'time' },
-      { k: 'duree', l: 'Durée', type: 'select', options: ['', '15 min', '30 min', '45 min', '1 h', '1 h 30', '2 h', 'Demi-journée'] },
-      { k: 'clientId', l: 'Client', type: 'ref', table: 'clients', full: true },
-      { k: 'vehiculeId', l: 'Véhicule (stock ou reprise)', type: 'ref', table: 'vehicules', tous: true, full: true },
-      { k: 'lieu', l: 'Lieu', full: true },
-      { k: 'notes', l: 'Notes', type: 'textarea', full: true },
-      { k: 'fait', l: 'Fait', type: 'check' },
-    ],
-    search: r => [r.type, r.lieu, r.notes, clientNom(db.get('clients', r.clientId)), vehiculeNom(db.get('vehicules', r.vehiculeId))],
-    filter: r => FILTRES_RDV[filtreRdv](r),
-    sort: (a, b) => {
-      const k = r => (r.date || '') + (r.heure || '99');
-      return filtreRdv === 'Faits' || filtreRdv === 'Tous' ? k(b).localeCompare(k(a)) : k(a).localeCompare(k(b));
-    },
-    card: r => {
-      const c = db.get('clients', r.clientId), v = db.get('vehicules', r.vehiculeId);
-      const retard = !r.fait && r.date < today();
-      const d = r.date ? new Date(r.date + 'T12:00') : null;
-      return `<div class="rdv${r.fait ? ' fait' : ''}">
-        <div class="rdv-date${r.date === today() ? ' today' : ''}${retard ? ' late' : ''}">
-          <span>${d ? d.toLocaleDateString('fr-FR', { weekday: 'short' }) : ''}</span>
-          <strong>${d ? d.getDate() : '?'}</strong>
-          <span>${d ? d.toLocaleDateString('fr-FR', { month: 'short' }) : ''}</span></div>
-        <div class="rdv-body"><div class="top"><span class="title">${esc(r.type)}${r.heure ? ' · ' + esc(r.heure) : ''}</span>
-          <span class="badge ${r.fait ? 'b-grey' : retard ? 'b-red' : TYPES_RDV[r.type] || 'b-blue'}">${r.fait ? 'Fait' : retard ? 'En retard' : esc(r.duree || 'À venir')}</span></div>
-          ${c ? `<div class="sub">${icon('clients', 14)} ${esc(clientNom(c))}${c.telephone ? ' · ' + esc(c.telephone) : ''}</div>` : ''}
-          ${v ? `<div class="sub">${icon('vehicules', 14)} ${esc(vehiculeNom(v))}${v.immatriculation ? ' · ' + esc(v.immatriculation) : ''}</div>` : ''}
-          ${r.lieu ? `<div class="sub">${esc(r.lieu)}</div>` : ''}</div></div>`;
-    },
-    canDelete: () => true,
-  },
 };
 
 // Onglets affichés : Stock et Reprise sont deux vues de la même liste de véhicules.
@@ -432,7 +394,6 @@ const ONGLETS = {
   reprises: { table: 'vehicules', icon: 'reprise', label: 'Reprise', placeholder: 'Modèle, plaque…' },
   depot: { table: 'vehicules', icon: 'depot', label: 'Dépôt vente', placeholder: 'Modèle, plaque, propriétaire…' },
   administratif: { table: null, icon: 'administratif', label: 'Administratif', court: 'Admin.', placeholder: '' },
-  planning: { table: 'planning', icon: 'planning', label: 'Planning', placeholder: 'Client, véhicule, type…' },
   donnees: { table: null, icon: 'donnees', label: 'Tableau de bord', placeholder: '' },
   parametres: { table: null, icon: 'reglages', label: 'Paramètres', placeholder: '' },
 };
@@ -456,11 +417,10 @@ function render() {
     .filter(r => !tab.filter || tab.filter(r))
     .filter(r => !q || norm(tab.search(r).join(' ')).includes(q))
     .sort(tab.sort);
-  if (onglet === 'planning' && filtreRdv === 'Semaine') { renderSemaine(rows); return; }
   const total = db.all(current).length;
   const n = rows.length;
-  const titre = { stock: 'véhicule', reprises: 'reprise', depot: 'véhicule', planning: 'rendez-vous', commandes: { Offres: 'offre', Commandes: 'commande', Livraisons: 'livraison', 'Annulées': 'annulée' }[vueCommande] }[onglet] || tab.titre;
-  $('#count').textContent = (tab.filter || n !== total) ? `${n} ${titre}${n > 1 && titre !== 'rendez-vous' ? 's' : ''}` : `${total} ${titre}${total > 1 ? 's' : ''}`;
+  const titre = { stock: 'véhicule', reprises: 'reprise', depot: 'véhicule', commandes: { Offres: 'offre', Commandes: 'commande', Livraisons: 'livraison', 'Annulées': 'annulée' }[vueCommande] }[onglet] || tab.titre;
+  $('#count').textContent = (tab.filter || n !== total) ? `${n} ${titre}${n > 1 ? 's' : ''}` : `${total} ${titre}${total > 1 ? 's' : ''}`;
   const q2 = $('#search').value.trim();
   const vide = {
     clients: ["Aucun client pour l'instant", 'Ajoute ton premier client avec « + Ajouter ».'],
@@ -468,7 +428,6 @@ function render() {
     stock: ['Aucun véhicule ici', 'Les véhicules entrent en stock quand tu valides une reprise.'],
     reprises: ['Aucune reprise ici', 'Tape la plaque dans « + Nouvelle reprise » : la fiche se remplit toute seule.'],
     depot: ['Aucun dépôt vente ici', 'Crée un dépôt avec « + Nouveau dépôt vente » : client, véhicule, prix, puis documents.'],
-    planning: ['Rien de prévu', 'Ajoute un essai, une expertise, une livraison ou une relance.'],
   }[onglet];
   const [t1, t2] = total && (q2 || tab.filter) ? ['Aucun résultat', 'Essaie une autre recherche ou d\'autres filtres.'] : vide;
   $('#list').innerHTML = n
@@ -476,50 +435,18 @@ function render() {
     : `<div class="empty">${ILLUS[ONGLETS[onglet].icon] || ILLUS.stock}<strong>${t1}</strong><span>${t2}</span></div>`;
 }
 
-const sigFiltres = () => onglet + vueStock + vueDepot + Droits.achat() + JSON.stringify(filtresStock) + filtreReprise + filtreRdv + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
-  + db.all('vehicules').map(v => v.statut + v.couleur).join() + db.all('planning').map(r => r.date + r.fait).join();
-
-// Calendrier de la semaine : un clic sur un jour ajoute un évènement à cette date.
-function renderSemaine(rows) {
-  const jours = [...Array(7)].map((_, i) => ajouterJours(semaine, i));
-  const fin = jours[6];
-  const fmt = (d, o) => d.toLocaleDateString('fr-FR', o);
-  const titre = semaine.getMonth() === fin.getMonth()
-    ? `${semaine.getDate()} – ${fmt(fin, { day: 'numeric', month: 'long', year: 'numeric' })}`
-    : `${fmt(semaine, { day: 'numeric', month: 'short' })} – ${fmt(fin, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  const auj = today();
-  const nb = rows.filter(r => r.date >= isoLocal(semaine) && r.date <= isoLocal(fin)).length;
-  $('#count').textContent = `${nb} évènement${nb > 1 ? 's' : ''} cette semaine`;
-  $('#list').innerHTML = `<div class="semaine">
-    <div class="semaine-nav">
-      <button type="button" class="chip" data-sem="-1" aria-label="Semaine précédente">‹</button>
-      <strong>${titre}</strong>
-      <button type="button" class="chip" data-sem="1" aria-label="Semaine suivante">›</button>
-      <button type="button" class="chip" data-sem="0">Aujourd'hui</button>
-    </div>
-    <div class="jours">${jours.map(d => {
-      const iso = isoLocal(d);
-      const evts = rows.filter(r => r.date === iso).sort((a, b) => (a.heure || '99').localeCompare(b.heure || '99'));
-      return `<div class="jour${iso === auj ? ' today' : ''}${iso < auj ? ' passe' : ''}" data-jour="${iso}">
-        <div class="jour-tete"><span>${fmt(d, { weekday: 'short' })}</span><strong>${d.getDate()}</strong></div>
-        <div class="jour-evts">${evts.map(r => {
-          const c = db.get('clients', r.clientId), v = db.get('vehicules', r.vehiculeId);
-          return `<div class="evt ${TYPES_RDV[r.type] || 'b-grey'}${r.fait ? ' fait' : ''}" data-id="${r.id}">
-            <span class="evt-h">${esc(r.heure || '')}</span> <span class="evt-t">${esc(r.type)}</span>
-            <span class="evt-s">${esc([c && clientNom(c), v && vehiculeNom(v)].filter(Boolean).join(' · '))}</span></div>`;
-        }).join('')}<span class="jour-add">+ Ajouter</span></div></div>`;
-    }).join('')}</div></div>`;
-}
+const sigFiltres = () => onglet + vueStock + vueDepot + Droits.achat() + JSON.stringify(filtresStock) + filtreReprise + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
+  + db.all('vehicules').map(v => v.statut + v.couleur).join();
 
 // Sous-onglets et filtres de l'onglet Véhicules (reconstruits seulement quand nécessaire, pour garder le focus).
 function renderFiltres() {
   const box = $('#filters');
   const add = $('#btn-add');
   add.style.display = onglet === 'stock' ? 'none' : '';
-  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'depot' ? 'Nouveau dépôt vente' : onglet === 'planning' ? 'Nouveau RDV' : onglet === 'commandes' ? 'Nouvelle offre' : 'Ajouter') + '</span>';
+  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'depot' ? 'Nouveau dépôt vente' : onglet === 'commandes' ? 'Nouvelle offre' : 'Ajouter') + '</span>';
   add.style.display = onglet === 'stock' || (onglet === 'commandes' && vueCommande !== 'Offres') ? 'none' : '';
   if (!ONGLETS[onglet].table) add.style.display = 'none';
-  if (!['stock', 'reprises', 'depot', 'planning', 'commandes'].includes(onglet)) { box.innerHTML = ''; box.dataset.vue = ''; return; }
+  if (!['stock', 'reprises', 'depot', 'commandes'].includes(onglet)) { box.innerHTML = ''; box.dataset.vue = ''; return; }
   const all = db.all('vehicules');
   const opt = (list, val) => list.map(o => `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o || 'Tous')}</option>`).join('');
   const sig = sigFiltres();
@@ -532,9 +459,6 @@ function renderFiltres() {
     html = `<div class="segmented">${['Offres', 'Commandes', 'Livraisons'].map(v =>
       `<button type="button" data-vuecmd="${v}" class="${v === vueCommande ? 'active' : ''}">${v} (${n(v)})</button>`).join('')}</div>
       ${n('Annulées') ? `<div class="chips"><button type="button" data-vuecmd="Annulées" class="chip${vueCommande === 'Annulées' ? ' active' : ''}">Annulées (${n('Annulées')})</button></div>` : ''}`;
-  } else if (onglet === 'planning') {
-    html = `<div class="chips">${Object.keys(FILTRES_RDV).map(f =>
-      `<button type="button" data-rdv="${f}" class="chip${f === filtreRdv ? ' active' : ''}">${f}${f === 'Semaine' ? '' : ` (${db.all('planning').filter(FILTRES_RDV[f]).length})`}</button>`).join('')}</div>`;
   } else if (vueVehicule === 'reprises') {
     const reps = all.filter(v => !Depot.est(v));
     html += `<div class="segmented">${Object.keys(STATUTS_REPRISE).map(f =>
@@ -709,7 +633,7 @@ function openForm(id, preset = {}) {
   const row = id ? db.get(current, id) : { ...preset };
   editing = { table: current, id };
   $('#form-title').textContent = id
-    ? (current === 'commandes' ? (row.statut === 'Offre' ? 'Offre ' : 'Commande ') + row.numero : current === 'vehicules' ? vehiculeNom(row) : current === 'planning' ? 'Rendez-vous' : clientNom(row))
+    ? (current === 'commandes' ? (row.statut === 'Offre' ? 'Offre ' : 'Commande ') + row.numero : current === 'vehicules' ? vehiculeNom(row) : clientNom(row))
     : (onglet === 'reprises' ? 'Nouvelle reprise' : tab.titreNouveau);
   $('#form-body').innerHTML = `<div class="grid">${tab.fields.map(f => fieldHtml(f, row)).join('')}</div>`;
   $('#btn-delete').style.display = id ? '' : 'none';
@@ -1008,8 +932,7 @@ function afficherSync(status, user, role) {
     // Nom de l'entreprise donné à la création du compte : repris dans les infos du garage.
     if (Sync.entreprise?.nom && !Param.get().garage.nom) Param.save({ garage: { ...Param.get().garage, nom: Sync.entreprise.nom } });
     // Compte démo vide : on le remplit avec des données d'exemple.
-    if (demo && !db.all('vehicules').length) Demo.remplir();
-    else if (demo) Demo.completerPhotos();
+    if (demo) chargerScript('demo.js').then(() => { if (!db.all('vehicules').length) { Demo.remplir(); render(); } else Demo.completerPhotos(); }).catch(() => {});
     // Démo : le garage fait partie du réseau, pour montrer les leads de l'apporteur de démo.
     if (demo && !Param.get().reseau.accepteLe) Param.save({ reseau: { ...Param.get().reseau, actif: true, accepteLe: new Date().toISOString() } });
     if (onglet === 'donnees') render();
@@ -1118,9 +1041,11 @@ $('#btn-mdp-changer').addEventListener('click', async () => {
 });
 $('#btn-demo-reset').addEventListener('click', () => {
   if (!confirm('Remplacer les données de démo par les données d\'exemple de départ ?')) return;
-  Demo.remplir(true);
-  switchTab(ongletAccueil());
-  toast('Démo remise à zéro');
+  chargerScript('demo.js').then(() => {
+    Demo.remplir(true);
+    switchTab(ongletAccueil());
+    toast('Démo remise à zéro');
+  }).catch(err => toast(err.message));
 });
 
 // ---------- Installation (sans App Store) ----------
@@ -1151,10 +1076,12 @@ $('#btn-installer-ici').addEventListener('click', installer);
 $('#install-non').addEventListener('click', () => { try { localStorage.setItem('crmzx-install-non', '1'); } catch (e) { /* rien */ } majInstall(); });
 window.addEventListener('appinstalled', () => { invitationInstall = null; majInstall(); });
 function afficherQr() {
-  const qr = qrcode(0, 'M');
-  qr.addData(Sync.lienConfig());
-  qr.make();
-  $('#qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  chargerScript('qrcode.js').then(() => {
+    const qr = qrcode(0, 'M');
+    qr.addData(Sync.lienConfig());
+    qr.make();
+    $('#qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }).catch(() => {});
 }
 $('#btn-copier-lien').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(Sync.lienConfig()); toast('Lien copié : envoie-le à ton collègue'); }
@@ -1197,8 +1124,7 @@ $('#search').addEventListener('input', render);
 $('#filters').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.rdv) filtreRdv = b.dataset.rdv;
-  else if (b.dataset.vuecmd) vueCommande = b.dataset.vuecmd;
+  if (b.dataset.vuecmd) vueCommande = b.dataset.vuecmd;
   else if (b.dataset.vuestock) vueStock = b.dataset.vuestock;
   else if (b.dataset.vuedepot) vueDepot = b.dataset.vuedepot;
   else if (b.dataset.reprise) filtreReprise = b.dataset.reprise;
@@ -1222,24 +1148,12 @@ $('#list').addEventListener('click', e => {
   if (Partenaires.clic(e)) return;
   const police = e.target.closest('[data-police]');
   if (police) { Papiers.ouvrirPolice(); return; }
-  const sem = e.target.closest('[data-sem]');
-  if (sem) {
-    const n = Number(sem.dataset.sem);
-    if (n) semaine = ajouterJours(semaine, 7 * n);
-    else { const d = new Date(); d.setHours(12, 0, 0, 0); semaine = ajouterJours(d, -((d.getDay() + 6) % 7)); }
-    render();
-    return;
-  }
   const aller = e.target.closest('[data-aller]');
   if (aller) { switchTab(aller.dataset.aller); return; }
   const anc = e.target.closest('[data-vehicule]');
   if (anc) { switchTab('stock'); openForm(anc.dataset.vehicule); return; }
   const souf = e.target.closest('[data-client]');
   if (souf) { switchTab('clients'); openForm(souf.dataset.client); return; }
-  const evt = e.target.closest('.evt');
-  if (evt) { openForm(evt.dataset.id); return; }
-  const jour = e.target.closest('[data-jour]');
-  if (jour) { openForm(null, { date: jour.dataset.jour }); return; }
   const card = e.target.closest('.card');
   if (!card) return;
   if (current === 'commandes') menuCommande(card.dataset.id);
