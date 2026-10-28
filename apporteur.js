@@ -82,6 +82,7 @@
       if (moi.statut !== 'actif') toast('Ton compte est suspendu : contacte Ocaz.');
       await Promise.all([chargerReseau(), chargerLeads()]);
       ecouter();
+      if (moi.statut === 'actif') Messagerie.demarrer({ client, moi: 'a:' + moi.email, bouton: $('#btn-msg') });
       afficher(onglet);
       Annonces.afficher(client);
     } catch (err) {
@@ -142,8 +143,9 @@
       <div class="sub">Envoyé le ${dateFr(l.cree_le)} · lead n° ${esc(l.numero)}${l.statut !== 'nouveau' && l.pris_le ? ' · pris en charge le ' + dateFr(l.pris_le) : ''}</div>
       <div class="sub">Commission : <b>${euros(com)}</b>${l.statut === 'vendu' && num(l.commission_finale) !== num(l.commission) ? ` (annoncée ${euros(l.commission)})` : ''}</div>
       ${l.statut === 'perdu' ? `<div class="sub">Motif : ${esc(l.motif || '—')}</div>` : ''}
-      ${l.statut === 'vendu' ? `<div class="sub">Vendu le ${dateFr(l.vendu_le)} · facture ${esc(l.facture_numero)}${l.payee ? ' · versée le ' + dateFr(l.payee_le) : ''}</div>
-        <div class="chips lead-actions"><button type="button" class="chip active" data-facture="${l.id}">Ma facture de commission</button></div>` : ''}
+      ${l.statut === 'vendu' ? `<div class="sub">Vendu le ${dateFr(l.vendu_le)} · facture ${esc(l.facture_numero)}${l.payee ? ' · versée le ' + dateFr(l.payee_le) : ''}</div>` : ''}
+      <div class="chips lead-actions">${l.statut === 'vendu' ? `<button type="button" class="chip active" data-facture="${l.id}">Ma facture de commission</button>` : ''}
+        ${Messagerie.actif ? `<button type="button" class="chip" data-msg-garage="${esc(l.entreprise_id)}" data-msg-sujet="${esc(`Lead n° ${l.numero} · ${[l.client_prenom, l.client_nom].filter(Boolean).join(' ')} · ${l.vehicule}`)}" data-msg-nom="${esc(g.nom || '')}">💬 Écrire au garage</button>` : ''}</div>
     </div>`;
   }
   function vueLeads() {
@@ -367,6 +369,7 @@
 
   async function deconnecter() {
     if (canal) { client.removeChannel(canal); canal = null; }
+    Messagerie.arreter();
     await client.auth.signOut();
     moi = null; leads = []; garages = [];
     $('#vue').innerHTML = '';
@@ -405,9 +408,10 @@
     $('#lead-fermer').addEventListener('click', () => $('#dlg-lead').close());
     $('#lead-annuler').addEventListener('click', () => $('#dlg-lead').close());
     $('#vue').addEventListener('click', e => {
-      const b = e.target.closest('[data-vue],[data-aller],[data-facture],.ap-vehicule');
+      const b = e.target.closest('[data-vue],[data-aller],[data-facture],[data-msg-garage],.ap-vehicule');
       if (!b) return;
-      if (b.dataset.vue) { vue = b.dataset.vue; afficher('leads'); }
+      if (b.dataset.msgGarage) Messagerie.contacter('g:' + b.dataset.msgGarage, b.dataset.msgNom, b.dataset.msgSujet);
+      else if (b.dataset.vue) { vue = b.dataset.vue; afficher('leads'); }
       else if (b.dataset.aller) afficher(b.dataset.aller);
       else if (b.dataset.facture) facture(b.dataset.facture);
       else ouvrirLead(b.dataset.g, b.dataset.v);

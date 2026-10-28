@@ -1,0 +1,54 @@
+/* Messagerie entre partenaires (messagerie.js) : bouton de l'en-tête, liste des conversations et fil des messages. */
+.msg-bouton { position: relative; }
+.msg-bouton[hidden] { display: none; }
+.msg-bouton .pastille { top: -6px; right: -6px; }
+dialog.msg .o-page { min-height: 0; }
+.msg-tete { gap: 10px; }
+.msg-titre { flex: 1; min-width: 0; display: grid; }
+.msg-titre h2 { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-corps { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+.msg-outils { display: flex; gap: 8px; margin-bottom: 10px; }
+.msg-outils .search { position: relative; flex: 1; }
+.msg-outils .search input { width: 100%; padding-left: 40px; }
+.msg-outils .primary { flex: none; }
+.msg-liste { display: grid; gap: 2px; }
+.msg-liste .section { margin-top: 6px; }
+.msg-conv { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; border-radius: 12px; padding: 10px; background: transparent; font-weight: 400; }
+.msg-conv:hover { background: var(--bg); filter: none; }
+.msg-conv .avatar { width: 42px; height: 42px; font-size: 14px; }
+.msg-conv .avatar.msg-ap { background: var(--accent); color: #0d0f12; }
+.msg-conv-txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.msg-conv-haut, .msg-conv-bas { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
+.msg-conv-haut b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-apercu { color: var(--muted); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.msg-conv.non-lu b, .msg-conv.non-lu .msg-apercu { color: var(--text); font-weight: 700; }
+.msg-conv .pastille { position: static; flex: none; }
+.msg-charge { padding: 10px; }
+.msg-fil { display: flex; flex-direction: column; gap: 6px; }
+.msg-anciens { align-self: center; margin-bottom: 6px; }
+.msg-jour { align-self: center; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: capitalize; margin: 10px 0 4px; }
+.msg-bulle { max-width: min(78%, 520px); padding: 8px 12px 6px; border-radius: 16px; display: grid; gap: 2px; box-shadow: var(--shadow); }
+.msg-bulle.autre { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.msg-bulle.moi { align-self: flex-end; background: var(--primary); color: var(--on-primary); border-bottom-right-radius: 5px; }
+.msg-texte { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.35; }
+.msg-meta { font-size: 11px; opacity: .7; justify-self: end; display: flex; align-items: center; gap: 4px; }
+.msg-meta .lien { font-size: 11px; padding: 0; border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }
+.msg-a-propos { font-size: 12px; font-weight: 600; opacity: .8; border-left: 3px solid var(--accent); padding-left: 7px; margin-bottom: 2px; }
+.msg-alerte { align-self: center; text-align: center; font-size: 13px; color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); padding: 8px 12px; border-radius: 10px; }
+.msg-saisie { border-top: 1px solid var(--line); background: var(--card); padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); display: grid; gap: 6px; }
+.msg-saisie[hidden] { display: none; }
+.msg-ligne { display: flex; gap: 8px; align-items: flex-end; }
+.msg-ligne textarea { flex: 1; min-height: 42px; max-height: 140px; resize: none; border-radius: 20px; padding: 10px 14px; }
+.msg-ligne .primary { border-radius: 20px; }
+.msg-contexte { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; background: var(--bg); border-left: 3px solid var(--accent); border-radius: 8px; padding: 6px 10px; }
+.msg-contexte[hidden] { display: none; }
+.msg-contexte .lien { border: 0; background: none; padding: 2px 6px; cursor: pointer; color: var(--muted); }
+.msg-admin { display: grid; gap: 12px; }
+.msg-signal { display: grid; gap: 6px; }
+.msg-signal .top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.msg-signal p { margin: 0; }
+.msg-extrait { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+.msg-extrait > div { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-extrait .vise { border-left: 3px solid var(--danger); padding-left: 8px; font-weight: 600; }
+.chip.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.msg-outils .ap-loupe { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }

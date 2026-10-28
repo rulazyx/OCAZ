@@ -154,6 +154,7 @@ const Reseau = (() => {
       <div class="chips lead-actions">
         ${['nouveau', 'en_cours'].includes(l.statut) ? `<a class="chip" href="tel:${esc(l.client_tel)}">Appeler</a>
           ${wa ? `<a class="chip" href="https://wa.me/${wa}?text=${encodeURIComponent(`Bonjour ${l.client_prenom || client}, ici ${Param.get().garage.nom || 'le garage'}. ${apporteurNom(a)} nous a transmis votre intérêt pour le véhicule ${l.vehicule}. `)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}` : ''}
+        ${Messagerie.actif ? `<button type="button" class="chip" data-lead-msg="${l.id}">💬 Écrire à l'apporteur</button>` : ''}
         ${l.statut === 'nouveau' ? `<button type="button" class="chip active" data-lead-prendre="${l.id}">Prendre en charge</button>` : ''}
         ${fiche ? `<button type="button" class="chip" data-lead-fiche="${l.id}">Fiche client</button>` : ''}
         ${l.statut === 'en_cours' ? `<button type="button" class="chip${livree ? ' active' : ''}" data-lead-vendu="${l.id}">Vendu</button>` : ''}
@@ -209,13 +210,14 @@ const Reseau = (() => {
   }
 
   function clic(e) {
-    const b = e.target.closest('[data-lead-vue],[data-lead-prendre],[data-lead-fiche],[data-lead-vendu],[data-lead-clore],[data-lead-payee],[data-lead-facture],[data-lead-rouvrir]');
+    const b = e.target.closest('[data-lead-vue],[data-lead-prendre],[data-lead-fiche],[data-lead-vendu],[data-lead-clore],[data-lead-payee],[data-lead-facture],[data-lead-rouvrir],[data-lead-msg]');
     if (!b) return false;
     const d = b.dataset;
     if (d.leadVue) { vue = d.leadVue; render(); return true; }
-    const x = leads.find(y => y.lead.id === (d.leadPrendre || d.leadFiche || d.leadVendu || d.leadClore || d.leadPayee || d.leadFacture || d.leadRouvrir));
+    const x = leads.find(y => y.lead.id === (d.leadPrendre || d.leadFiche || d.leadVendu || d.leadClore || d.leadPayee || d.leadFacture || d.leadRouvrir || d.leadMsg));
     if (!x) return true;
-    if (d.leadPrendre) prendre(x);
+    if (d.leadMsg) Messagerie.contacter('a:' + x.apporteur.email, apporteurNom(x.apporteur), `Lead n° ${x.lead.numero} · ${[x.lead.client_prenom, x.lead.client_nom].filter(Boolean).join(' ')} · ${x.lead.vehicule}`);
+    else if (d.leadPrendre) prendre(x);
     else if (d.leadFiche) { switchTab('clients'); openForm(x.lead.client_id); }
     else if (d.leadVendu) ouvrirDialogue(x, 'vendu');
     else if (d.leadClore) ouvrirDialogue(x, 'perdu');

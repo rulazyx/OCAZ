@@ -76,6 +76,7 @@
       document.body.classList.remove('verrouille');
       $('#auth').hidden = true;
       $('#compte-email').textContent = 'Connecté : ' + user.email;
+      Messagerie.moderer({ client, bouton: $('#btn-msg') });
       await charger();
       rafraichir();
     } catch (err) { $('#auth-texte').textContent = err.message; }

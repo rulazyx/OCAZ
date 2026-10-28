@@ -61,7 +61,9 @@ const Partenaires = (() => {
     const gg = g.garage || {};
     const nom = [v.marque, v.modele, v.finition].filter(Boolean).join(' ');
     const msg = `Bonjour, ici ${Param.get().garage.nom || 'un garage du réseau Ocaz'}. Votre ${nom}${v.annee ? ' de ' + v.annee : ''} est-il toujours disponible ?`;
+    const sujet = [nom, v.annee, euros(v.prix)].filter(Boolean).join(' · ');
     const actions = [
+      Messagerie.actif && Messagerie.moi !== 'g:' + g.entreprise_id && [`💬 Message à ${gg.nom || 'ce garage'} dans Ocaz`, () => Messagerie.contacter('g:' + g.entreprise_id, gg.nom, sujet)],
       gg.telephone && [`📞 Appeler ${gg.nom || 'le garage'} (${gg.telephone})`, () => { location.href = 'tel:' + gg.telephone.replace(/\s/g, ''); }],
       gg.telephone && ['💬 WhatsApp', () => window.open(Papiers.lienWhatsapp({ telephone: gg.telephone }, msg), '_blank', 'noopener')],
       gg.email && ['✉ Email', () => { location.href = `mailto:${gg.email}?subject=${encodeURIComponent(nom)}&body=${encodeURIComponent(msg)}`; }],
