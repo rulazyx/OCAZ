@@ -401,6 +401,9 @@
     // Paramètres : icône en haut à droite de l'en-tête, comme chez les garages.
     $('#btn-menu').innerHTML = icon('reglages', 20);
     $('#btn-menu').addEventListener('click', () => afficher('parametres'));
+    // Logo OCAZ : retour au Tableau de bord.
+    $('.brand').addEventListener('click', () => afficher('donnees'));
+    $('.brand').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); afficher('donnees'); } });
     $('#f-mdp').addEventListener('submit', nouveauMdp);
     $('#auth-sortir').addEventListener('click', deconnecter);
     $('#btn-espace').addEventListener('click', () => preferer('garage'));
