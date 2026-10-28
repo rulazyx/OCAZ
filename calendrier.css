@@ -1,0 +1,64 @@
+/* Onglet Calendrier de l'administrateur (calendrier.js) : semaine heure par heure, une couleur par type d'activité. */
+.cal-nav strong { font-size: 15px; text-transform: none; }
+.cal-nav [data-cal-sem="0"] { font-size: 13px; padding: 6px 10px; min-width: 0; }
+.cal-legende { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.cal-legende .chip { margin-left: auto; font-size: 12.5px; padding: 5px 11px; }
+.cal-type { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.cal-type i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+.cal-type small { color: var(--muted); font-weight: 500; }
+
+.cal-grille { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; transition: transform .14s ease, opacity .14s ease; touch-action: pan-y; }
+.cal-part-g { transform: translateX(40px); opacity: 0; }
+.cal-part-d { transform: translateX(-40px); opacity: 0; }
+.cal-entre-g { animation: cal-g .18s ease; }
+.cal-entre-d { animation: cal-d .18s ease; }
+@keyframes cal-g { from { transform: translateX(-40px); opacity: 0; } }
+@keyframes cal-d { from { transform: translateX(40px); opacity: 0; } }
+.cal-jours, .cal-corps { display: grid; grid-template-columns: 38px repeat(7, minmax(0, 1fr)); }
+.cal-jours { border-bottom: 1px solid var(--line); }
+.cal-jours span { text-align: center; padding: 7px 0 6px; font-size: 11.5px; color: var(--muted); font-weight: 600; display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.cal-jours b { font-size: 16px; color: var(--text); }
+.cal-jours .auj b { background: var(--accent); color: #111; border-radius: 99px; min-width: 26px; padding: 1px 4px; }
+.cal-corps { max-height: min(62dvh, 640px); overflow-y: auto; overscroll-behavior: contain; position: relative; }
+.cal-heures span { display: block; height: var(--h); font-size: 10.5px; color: var(--muted); text-align: right; padding-right: 5px; transform: translateY(-6px); }
+.cal-heures span:first-child { visibility: hidden; }
+.cal-jour { position: relative; border-left: 1px solid var(--line); cursor: copy;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--h) - 1px), var(--line) calc(var(--h) - 1px), var(--line) var(--h)); }
+.cal-jour.auj { background-color: color-mix(in srgb, var(--accent) 5%, transparent); }
+.cal-maintenant { position: absolute; left: -1px; right: 0; height: 2px; background: var(--accent); z-index: 2; pointer-events: none; }
+.cal-maintenant::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 99px; background: var(--accent); }
+.cal-ev { all: unset; box-sizing: border-box; position: absolute; z-index: 1; margin-left: 1px; overflow: hidden; cursor: pointer;
+  background: color-mix(in srgb, var(--c) 24%, var(--card)); border-left: 3px solid var(--c); border-radius: 6px; padding: 3px 4px;
+  display: flex; flex-direction: column; gap: 1px; font-size: 11.5px; line-height: 1.2; color: var(--text); }
+.cal-ev:hover { background: color-mix(in srgb, var(--c) 36%, var(--card)); }
+.cal-ev:focus-visible { outline: 2px solid var(--c); }
+.cal-ev b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
+.cal-ev small { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ev.court { flex-direction: row; align-items: center; gap: 4px; padding-top: 1px; padding-bottom: 1px; }
+.cal-ev.court b { -webkit-line-clamp: 1; }
+@media (max-width: 560px) {
+  .cal-jours, .cal-corps { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); }
+  .cal-ev { padding: 2px 3px; font-size: 10.5px; border-left-width: 2px; border-radius: 4px; }
+  .cal-ev small, .cal-ev.court small { display: none; }
+  .cal-heures span { font-size: 10px; padding-right: 3px; }
+}
+@media (hover: none) { .cal-jour { cursor: default; } }
+
+.cal-liste { gap: 14px; }
+.cal-liste-jour { display: grid; gap: 6px; }
+.cal-liste-jour h4 { margin: 0; font-size: 13px; text-transform: capitalize; color: var(--muted); }
+.cal-ligne { display: flex; gap: 8px; align-items: center; }
+.cal-ligne button { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; min-width: 0; display: flex; gap: 10px; align-items: stretch; }
+.cal-ligne button i { width: 4px; border-radius: 4px; background: var(--c); flex: none; }
+.cal-ligne span { display: grid; min-width: 0; }
+.cal-ligne b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ligne small { color: var(--muted); font-size: 12.5px; }
+.cal-ligne a.chip { border: 1px solid var(--line); color: var(--text); text-decoration: none; font-weight: 600; flex: none; }
+
+.cal-choix { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-choix .cal-type.active { background: color-mix(in srgb, var(--c) 22%, var(--card)); border-color: var(--c); color: var(--text); }
+.cal-type-ligne { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cal-type-ligne input { flex: 1; min-width: 140px; }
+.cal-pastilles { display: flex; gap: 5px; flex-wrap: wrap; }
+.cal-pastille { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 99px; background: var(--c); box-sizing: border-box; border: 2px solid transparent; }
+.cal-pastille.active { border-color: var(--text); box-shadow: inset 0 0 0 2px var(--card); }

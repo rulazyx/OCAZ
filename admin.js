@@ -1,5 +1,5 @@
 // Interface de l'administrateur d'Ocaz (super-admin seulement), pensée pour faire grandir le réseau jusqu'à une centaine de garages :
-// Tableau de bord (activité de chaque garage), Prospection (garages à signer), Partenaires (revendeurs et apporteurs),
+// Tableau de bord (activité de chaque garage), Prospection (garages à signer), Calendrier (calendrier.js), Partenaires (revendeurs et apporteurs),
 // Abonnements (revenu mensuel, essais, impayés), Leads réseau (tous les leads) et Annonces (bandeau chez les partenaires).
 // L'administrateur est le seul à créer les comptes : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente)
 // et packs livraison de chaque revendeur ; fiche complète de chaque apporteur. Mot de passe de départ : 12345678.
@@ -89,6 +89,7 @@
       $('#auth').hidden = true;
       $('#compte-email').textContent = 'Connecté : ' + user.email;
       Messagerie.moderer({ client, bouton: $('#btn-msg') });
+      Calendrier.monter({ rpc, toast, vue: $('#vue'), actif: () => onglet === 'calendrier' });
       await charger();
       rafraichir();
     } catch (err) { $('#auth-texte').textContent = err.message; }
@@ -101,7 +102,7 @@
   }
   // Données de l'onglet ouvert, rechargées à chaque visite.
   function rafraichir() {
-    ({ tableau: chargerTableau, prospection: chargerProspects, leads: chargerLeads, annonces: chargerAnnonces }[onglet] || charger)();
+    ({ tableau: chargerTableau, prospection: chargerProspects, calendrier: Calendrier.charger, leads: chargerLeads, annonces: chargerAnnonces }[onglet] || charger)();
   }
 
   // ---------- Onglet Partenaires ----------
@@ -135,7 +136,7 @@
   }
   function afficher() {
     document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === onglet));
-    ({ tableau: afficherTableau, prospection: afficherProspection, abonnements: afficherAbonnements, leads: afficherLeads, annonces: afficherAnnonces }[onglet] || afficherPartenaires)();
+    ({ tableau: afficherTableau, prospection: afficherProspection, calendrier: Calendrier.afficher, abonnements: afficherAbonnements, leads: afficherLeads, annonces: afficherAnnonces }[onglet] || afficherPartenaires)();
   }
   function afficherPartenaires() {
     const liste = vue === 'revendeurs'
@@ -701,7 +702,7 @@
   // ---------- Démarrage ----------
   function init() {
     document.querySelectorAll('[data-tab]').forEach(b => {
-      const ic = { tableau: 'donnees', prospection: 'planning', partenaires: 'clients', abonnements: 'abonnements', leads: 'leads', annonces: 'annonce' }[b.dataset.tab];
+      const ic = { tableau: 'donnees', prospection: 'planning', calendrier: 'agenda', partenaires: 'clients', abonnements: 'abonnements', leads: 'leads', annonces: 'annonce' }[b.dataset.tab];
       b.innerHTML = icon(ic, b.closest('#bottom-tabs') ? 22 : 18) + '<span>' + b.textContent + '</span>';
       b.addEventListener('click', () => { onglet = b.dataset.tab; q = ''; afficher(); window.scrollTo(0, 0); rafraichir(); });
     });

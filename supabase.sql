@@ -1426,3 +1426,65 @@ end $$;
 
 revoke execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) from public, anon;
 grant execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) to authenticated;
+
+-- Calendrier de l'administrateur (2026-10-28) : ses rendez-vous et activités de la semaine, heure par heure.
+-- Les types d'activité (nom + couleur) sont dans crm_admin_reglages, clé 'agenda_types'.
+create table if not exists public.crm_admin_agenda (
+  id uuid primary key default gen_random_uuid(),
+  titre text not null,
+  type text not null default '',
+  jour date not null,
+  debut time not null,
+  fin time not null,
+  lieu text not null default '',
+  note text not null default '',
+  prospect_id uuid references public.crm_prospects (id) on delete set null,
+  cree_le timestamptz not null default now(),
+  maj_le timestamptz not null default now(),
+  check (fin > debut)
+);
+alter table public.crm_admin_agenda enable row level security;
+create index if not exists crm_admin_agenda_jour on public.crm_admin_agenda (jour);
+
+-- Événements entre deux dates (incluses), avec le nom du garage prospect lié.
+create or replace function public.crm_admin_agenda(p_du date, p_au date) returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select json_agg(json_build_object('id', a.id, 'titre', a.titre, 'type', a.type, 'jour', a.jour,
+      'debut', to_char(a.debut, 'HH24:MI'), 'fin', to_char(a.fin, 'HH24:MI'), 'lieu', a.lieu, 'note', a.note,
+      'prospect_id', a.prospect_id, 'prospect', p.nom, 'telephone', p.telephone) order by a.jour, a.debut)
+    from public.crm_admin_agenda a left join public.crm_prospects p on p.id = a.prospect_id
+    where a.jour between p_du and p_au), '[]'::json);
+end $$;
+
+-- Crée (sans id) ou met à jour (avec id) un rendez-vous ou une activité.
+create or replace function public.crm_admin_agenda_enregistrer(p jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare aid uuid := nullif(p ->> 'id', '')::uuid; t text := left(trim(coalesce(p ->> 'titre', '')), 140);
+  v_jour date := nullif(p ->> 'jour', '')::date; v_debut time := nullif(p ->> 'debut', '')::time; v_fin time := nullif(p ->> 'fin', '')::time;
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  if t = '' then raise exception 'Donne un titre au rendez-vous.'; end if;
+  if v_jour is null or v_debut is null or v_fin is null then raise exception 'Indique le jour et les heures.'; end if;
+  if v_fin <= v_debut then raise exception 'L''heure de fin doit être après l''heure de début.'; end if;
+  if aid is null then
+    insert into public.crm_admin_agenda (titre, jour, debut, fin) values (t, v_jour, v_debut, v_fin) returning id into aid;
+  end if;
+  update public.crm_admin_agenda set titre = t, type = left(coalesce(p ->> 'type', ''), 40), jour = v_jour, debut = v_debut, fin = v_fin,
+    lieu = left(coalesce(p ->> 'lieu', ''), 200), note = left(coalesce(p ->> 'note', ''), 4000),
+    prospect_id = nullif(p ->> 'prospect_id', '')::uuid, maj_le = now()
+  where id = aid;
+  if not found then raise exception 'Rendez-vous introuvable.'; end if;
+  return aid;
+end $$;
+
+create or replace function public.crm_admin_agenda_supprimer(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  delete from public.crm_admin_agenda where id = p_id;
+end $$;
+
+revoke execute on function public.crm_admin_agenda(date, date), public.crm_admin_agenda_enregistrer(jsonb), public.crm_admin_agenda_supprimer(uuid) from public, anon;
+grant execute on function public.crm_admin_agenda(date, date), public.crm_admin_agenda_enregistrer(jsonb), public.crm_admin_agenda_supprimer(uuid) to authenticated;
