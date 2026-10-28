@@ -126,8 +126,10 @@ const EnLigne = (() => {
     $('#vit-etat').textContent = r.slug ? `${r.actif ? 'En ligne' : 'Désactivée'} · ${db.all('vehicules').filter(v => VISIBLES.includes(v.statut)).length} véhicule(s) affiché(s). Elle se met à jour toute seule.` : '';
     $('#vit-qr').innerHTML = '';
     if (r.slug && r.actif) {
-      const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
-      $('#vit-qr').innerHTML = qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true });
+      chargerScript('qrcode.js').then(() => {
+        const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+        $('#vit-qr').innerHTML = qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true });
+      }).catch(() => {});
     }
     $('#vit-notif').hidden = !('Notification' in window) || Notification.permission === 'granted';
     $('#vit-integrer').hidden = !(r.slug && r.actif);
