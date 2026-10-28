@@ -1334,8 +1334,11 @@ begin
   if (select count(*) from public.crm_messages where auteur_email = e and cree_le > now() - interval '10 minutes') >= 60 then
     raise exception 'Trop de messages d''affilée : attends quelques minutes.';
   end if;
+  -- Messages envoyés au nom d'Ocaz : signés automatiquement par Anthony (le même message ne reçoit qu'une signature).
   insert into public.crm_messages (conversation_id, auteur_cle, auteur_email, texte, contexte)
-    values (p_conv, p_moi, e, t, left(trim(coalesce(p_contexte, '')), 200)) returning * into m;
+    values (p_conv, p_moi, e, case when p_moi = 'o:ocaz' and t not like '%Anthony Payet-Lamer' || chr(10) || 'OCAZ'
+        then t || chr(10) || chr(10) || 'Anthony Payet-Lamer' || chr(10) || 'OCAZ' else t end,
+      left(trim(coalesce(p_contexte, '')), 200)) returning * into m;
   update public.crm_conversations set dernier_le = m.cree_le, dernier_texte = left(t, 140),
     lu_a = case when cle_a = p_moi then m.cree_le else lu_a end, lu_b = case when cle_b = p_moi then m.cree_le else lu_b end
     where id = p_conv;
