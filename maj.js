@@ -1,37 +1,41 @@
 // Mise à jour en direct : quand une nouvelle version d'Ocaz est en ligne, les pages déjà ouvertes
 // (revendeur, apporteur, admin, appli installée) affichent un bandeau « Mettre à jour ».
-// Comment on le sait : on demande au serveur l'empreinte (ETag / date) de la page et de ses fichiers
-// JS et CSS. Si elle a changé depuis l'ouverture, c'est qu'une nouvelle version a été publiée.
-// Rien à faire à la main à chaque mise en ligne.
+// Comment on le sait : le fichier version.json change à chaque mise en ligne (réécrit tout seul par GitHub,
+// voir .github/workflows/version.yml). Une seule petite requête toutes les 5 minutes, au lieu de tous les fichiers.
+// Le téléphone garde une copie de l'appli (sw.js) pour l'ouvrir vite : au démarrage, si cette copie est plus
+// ancienne que la version en ligne, on la jette et on recharge tout de suite.
 (function () {
   if (!/^https?:$/.test(location.protocol)) return;
   const INTERVALLE = 5 * 60 * 1000; // toutes les 5 minutes, et à chaque retour sur l'appli
-  const fichiers = () => {
-    const urls = [location.pathname];
-    document.querySelectorAll('script[src], link[rel="stylesheet"][href]').forEach(el => {
-      const u = new URL(el.src || el.href, location.href);
-      if (u.origin === location.origin) urls.push(u.pathname);
-    });
-    urls.push(new URL('sw.js', location.href).pathname);
-    return [...new Set(urls)];
+  const VERSION = new URL('version.json', location.href).pathname;
+  // « frais » : sw.js laisse passer cette adresse sans copie, pour lire la version vraiment en ligne.
+  const enLigne = () => lire(VERSION + '?frais=' + Date.now(), 'no-store');
+  const lire = async (u, cache) => {
+    const r = await fetch(u, { cache });
+    if (!r.ok) throw new Error('version ' + r.status);
+    return String((await r.json()).version || '');
   };
-  const empreinte = async () => {
-    const parts = await Promise.all(fichiers().map(async u => {
-      const r = await fetch(u, { method: 'HEAD', cache: 'no-store' });
-      if (!r.ok) return u + ':' + r.status;
-      return u + ':' + (r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '');
-    }));
-    return parts.join('|');
+
+  // Jette la copie gardée par le téléphone et recharge : tous les fichiers reviennent du serveur.
+  const appliquer = async () => {
+    try { sessionStorage.setItem('ocaz-maj', String(Date.now())); } catch (_) {}
+    try { if (window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch (_) {}
+    location.reload();
   };
+  // Garde-fou : jamais deux rechargements automatiques en moins d'une minute.
+  const rechargeRecente = () => { try { return Date.now() - Number(sessionStorage.getItem('ocaz-maj') || 0) < 60000; } catch (_) { return true; } };
 
   let reference = null, enCours = false, affiche = false;
   const verifier = async () => {
     if (enCours || affiche || document.hidden || !navigator.onLine) return;
     enCours = true;
     try {
-      const e = await empreinte();
-      if (reference === null) reference = e;
-      else if (e !== reference) montrer();
+      const derniere = await enLigne();
+      if (reference === null) {
+        reference = derniere;
+        // Version des fichiers ouverts = version.json tel que la copie du téléphone l'a gardé.
+        if (navigator.serviceWorker?.controller && !rechargeRecente() && await lire(VERSION, 'default') !== derniere) { await appliquer(); return; }
+      } else if (derniere !== reference) montrer();
     } catch (_) { /* hors ligne ou serveur indisponible : on réessaiera */ }
     enCours = false;
   };
@@ -62,12 +66,10 @@
     b.querySelector('.go').addEventListener('click', async () => {
       b.querySelector('.go').textContent = 'Mise à jour…';
       try {
-        // On recharge les fichiers en passant outre le cache du navigateur, pour ne pas rouvrir l'ancienne version.
-        await Promise.all(fichiers().map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
         const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
         if (reg) await reg.update();
       } catch (_) {}
-      location.reload();
+      appliquer();
     });
     // « Plus tard » : le bandeau revient dans 30 minutes.
     b.querySelector('.non').addEventListener('click', () => {
