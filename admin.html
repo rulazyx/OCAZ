@@ -27,8 +27,12 @@
 <header>
   <div class="brand"><img src="logo.svg" alt="" width="34" height="34"><span class="brand-name">OCAZ</span><span class="ap-marque">Admin</span></div>
   <nav id="tabs">
-    <button data-tab="partenaires" class="active">Partenaires</button>
+    <button data-tab="tableau" class="active">Tableau de bord</button>
+    <button data-tab="prospection">Prospection</button>
+    <button data-tab="partenaires">Partenaires</button>
     <button data-tab="abonnements">Abonnements</button>
+    <button data-tab="leads">Leads réseau</button>
+    <button data-tab="annonces">Annonces</button>
   </nav>
   <a id="btn-garage" class="espace-bascule" href="./" title="Ouvrir mon garage dans l'appli">⇄ Garage</a>
   <button id="btn-menu" class="ghost" title="Mon compte" aria-label="Mon compte"></button>
@@ -39,8 +43,12 @@
 </main>
 
 <nav id="bottom-tabs">
-  <button data-tab="partenaires" class="active">Partenaires</button>
-  <button data-tab="abonnements">Abonnements</button>
+  <button data-tab="tableau" class="active">Bord</button>
+  <button data-tab="prospection">Prospects</button>
+  <button data-tab="partenaires">Partenaires</button>
+  <button data-tab="abonnements">Abos</button>
+  <button data-tab="leads">Leads</button>
+  <button data-tab="annonces">Annonces</button>
 </nav>
 
 <dialog id="dlg-rev" class="plein">
@@ -64,6 +72,19 @@
       <button type="button" id="app-ok" class="primary">Enregistrer</button></div>
   </div>
 </dialog>
+
+<dialog id="dlg-pro" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="pro-titre">Ajouter un garage à démarcher</h2>
+      <button type="button" id="pro-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <div class="o-body" id="pro-body"></div>
+    <div class="actions o-actions"><button type="button" id="pro-suppr" class="danger">Supprimer</button><span class="spacer"></span>
+      <button type="button" id="pro-annuler">Annuler</button>
+      <button type="button" id="pro-ok" class="primary">Enregistrer</button></div>
+  </div>
+</dialog>
+
+<input type="file" id="pro-fichier" accept=".csv,text/csv" hidden>
 
 <dialog id="dlg-compte">
   <div style="padding:20px">
