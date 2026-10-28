@@ -373,7 +373,7 @@ const TABS = {
         if (statut === 'Vendu') { Papiers.rappelRetrait(db.get('vehicules', v.id)); Depot.apresVente(db.get('vehicules', v.id), o); }
       }
       repriseSuitCommande(o);
-      // Date de livraison effective : sert au CA du mois et à la rotation du stock (onglet Données).
+      // Date de livraison effective : sert au CA du mois et à la rotation du stock (onglet Tableau de bord).
       if (o.statut === 'Livrée' && !o.dateLivree) db.upsert('commandes', { id: o.id, dateLivree: today() });
       // La liste suit la vente dans son nouveau sous-onglet.
       vueCommande = Object.keys(VUES_COMMANDE).find(k => VUES_COMMANDE[k](o)) || vueCommande;
@@ -433,7 +433,7 @@ const ONGLETS = {
   depot: { table: 'vehicules', icon: 'depot', label: 'Dépôt vente', placeholder: 'Modèle, plaque, propriétaire…' },
   administratif: { table: null, icon: 'administratif', label: 'Administratif', court: 'Admin.', placeholder: '' },
   planning: { table: 'planning', icon: 'planning', label: 'Planning', placeholder: 'Client, véhicule, type…' },
-  donnees: { table: null, icon: 'donnees', label: 'Données', placeholder: '' },
+  donnees: { table: null, icon: 'donnees', label: 'Tableau de bord', placeholder: '' },
   parametres: { table: null, icon: 'reglages', label: 'Paramètres', placeholder: '' },
 };
 let onglet = 'clients';

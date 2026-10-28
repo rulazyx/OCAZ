@@ -1,4 +1,4 @@
-// Onglet Données : tableau de bord du garage, calculé à partir des fiches (rien n'est saisi ici).
+// Onglet Tableau de bord du garage, calculé à partir des fiches (rien n'est saisi ici).
 // CA d'une vente = prix de vente − remise + pack livraison (la carte grise est une taxe reversée, hors CA).
 // Bénéfice estimé = CA − prix d'achat du véhicule − frais (réels de la checklist de préparation, sinon estimés à la reprise).
 const Donnees = (() => {

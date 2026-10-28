@@ -23,7 +23,7 @@ const Droits = (() => {
   }
   const visible = nom => onglets()[nom] !== false;
 
-  // Masque les boutons d'onglets interdits ; renvoie vers Données si l'onglet ouvert disparaît.
+  // Masque les boutons d'onglets interdits ; renvoie vers le Tableau de bord si l'onglet ouvert disparaît.
   function appliquer() {
     document.querySelectorAll('[data-tab]').forEach(b => { b.hidden = !visible(b.dataset.tab); });
     if (typeof onglet !== 'undefined' && !visible(onglet)) switchTab('donnees');

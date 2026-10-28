@@ -232,7 +232,7 @@ const Reseau = (() => {
     return true;
   }
 
-  // Panneau de l'accueil (onglet Données).
+  // Panneau de l'accueil (onglet Tableau de bord).
   function panneau() {
     if (!actif() && !leads.length) return '';
     const nv = nouveaux();

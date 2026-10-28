@@ -187,7 +187,7 @@ const Revision = (() => {
     return true;
   }
 
-  // Panneau de l'accueil (onglet Données).
+  // Panneau de l'accueil (onglet Tableau de bord).
   function panneau() {
     if (!actif()) return '';
     const tous = leads();
