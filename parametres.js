@@ -28,18 +28,6 @@ const Param = (() => {
     ['telephone', 'Téléphone', '', 'tel'], ['email', 'Email', '', 'email'], ['siret', 'SIRET'], ['tva', 'N° TVA intracom.'], ['site', 'Site web', 'full'],
   ];
 
-  // Anciens réglages gardés sur l'appareil (avant l'onglet Paramètres) : repris une fois.
-  function anciens() {
-    const lire = k => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
-    const o = lire('crmzx-offre'), r = lire('crmzx-reprise');
-    const p = JSON.parse(JSON.stringify(DEFAUTS));
-    ['prixCV', 'taxeFixe', 'acheminement'].forEach(k => { if (o[k] != null) p.carteGrise[k] = o[k]; });
-    if (o.demarches != null) p.packs[0].montant = o.demarches;
-    if (o.protection != null) p.packs[1].montant = o.protection;
-    ['hausseReunion', 'margeMin', 'margeMax'].forEach(k => { if (r[k] != null) p.reprise[k] = r[k]; });
-    return p;
-  }
-
   // Réglages de l'administrateur : infos légales du garage, packs livraison, réseau Ocaz et sa commission.
   function admin(p) {
     const c = (typeof Sync !== 'undefined' && Sync.config) || {};
@@ -55,7 +43,7 @@ const Param = (() => {
   }
 
   function get() {
-    const p = db.data.parametres || anciens();
+    const p = db.data.parametres || JSON.parse(JSON.stringify(DEFAUTS));
     const a = admin(p);
     return {
       ...DEFAUTS, ...p,

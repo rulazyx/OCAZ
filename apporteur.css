@@ -3,10 +3,6 @@
 .ap-carte.large { width: min(640px, 100%); margin: 20px 0; }
 .ap-carte .section { margin: 10px 0 0; }
 .ap-carte form .grid { gap: 10px; }
-.ap-bascule { justify-content: center; }
-.ap-formes { display: grid; gap: 4px; }
-.ap-formes .check span { display: grid; }
-.ap-formes small { color: var(--muted); font-size: 12px; }
 .ap-contrat { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px 10px; font-size: 13px; background: var(--bg); }
 .ap-contrat h4 { margin: 10px 0 2px; font-size: 13.5px; }
 .ap-contrat p { margin: 0; text-align: left; color: var(--text); }

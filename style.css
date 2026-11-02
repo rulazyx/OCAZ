@@ -242,7 +242,6 @@ details.fiche dd { margin: 0; word-break: break-word; }
 .sync-pill.s-erreur { color: #fca5a5; }
 .sync-pill.s-envoi, .sync-pill.s-connexion { color: #fcd34d; }
 @media (max-width: 420px), (min-width: 900px) and (max-width: 1440px) { .sync-pill span { display: none; } }
-#dlg-menu h2 { font-size: 17px; }
 
 /* Pas de zoom : double-tap désactivé, et champs en 16 px pour éviter le zoom automatique d'iOS. */
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
@@ -350,7 +349,6 @@ body.verrouille { overflow: hidden; }
 .auth-carte img { justify-self: center; border-radius: 18px; }
 .auth-carte h1 { margin: 0; text-align: center; font-size: 24px; display: flex; gap: 8px; justify-content: center; align-items: center; color: var(--text); }
 .auth-carte p { margin: 0; text-align: center; }
-.auth-liens { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 button.lien { background: none; border: 0; padding: 4px 0; color: var(--primary); font-weight: 600; font-size: 14px; }
 .ap-marque { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: var(--accent); color: #0d0f12; padding: 2px 8px; border-radius: 99px; }
 #auth-form[hidden] { display: none; }
@@ -371,7 +369,6 @@ button.lien { background: none; border: 0; padding: 4px 0; color: var(--primary)
 details summary { cursor: pointer; font-weight: 600; color: var(--muted); }
 
 /* Équipe */
-.equipe-liste { display: grid; gap: 6px; margin-bottom: 10px; }
 .membre { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
 .membre > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
@@ -463,15 +460,9 @@ body[data-onglet="parametres"] #btn-menu { background: rgba(255,255,255,.16); }
 .p-logo { width: 64px; height: 64px; border-radius: 12px; border: 1px dashed var(--line); display: grid; place-items: center; overflow: hidden; background: var(--bg); }
 .p-logo img { width: 100%; height: 100%; object-fit: contain; }
 .p-logo .hint { font-size: 11px; text-align: center; }
-.p-packs, .p-docs { display: grid; gap: 8px; margin-bottom: 4px; }
-.pack-ligne { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto auto; gap: 8px; align-items: center; }
+.p-docs { display: grid; gap: 8px; margin-bottom: 4px; }
 .pk-montant { align-items: center; gap: 4px; }
 .pk-montant input { min-width: 0; width: 100%; }
-.pk-coche { font-size: 13px; white-space: nowrap; gap: 6px; padding: 0; border: 0; background: none; }
-@media (max-width: 480px) {
-  .pack-ligne { grid-template-columns: minmax(0, 1fr) auto auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-  .pack-ligne > input { grid-column: 1 / -1; }
-}
 .doc-ligne { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
 .doc-nom { flex: 1; min-width: 0; display: grid; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .doc-nom small { color: var(--muted); font-size: 12px; }
@@ -484,10 +475,6 @@ body[data-onglet="parametres"] #btn-menu { background: rgba(255,255,255,.16); }
 #auth-config summary { font-size: 13px; }
 .membre small { display: block; color: var(--orange); font-size: 11.5px; }
 .membre .chip { padding: 4px 9px; font-size: 12.5px; }
-.sa-liste { display: grid; gap: 10px; margin-top: 14px; }
-.sa-garage { border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 6px; }
-.sa-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.sa-tete .hint { margin-left: auto; }
 .sync-pill.demo { color: #fcd34d; }
 .auth-erreur { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; text-align: center;
   color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); }
@@ -539,7 +526,6 @@ a.button.wa-btn { display: inline-flex; align-items: center; gap: 6px; backgroun
 .prepa-point.fait .check span { text-decoration: line-through; color: var(--muted); }
 .prepa-point .check { align-items: center; padding: 10px 6px; }
 .prepa-point .check input { width: 22px; height: 22px; margin: 0; }
-.mode-choix { margin-bottom: 12px; }
 .depot-info { display: grid; gap: 6px; }
 .depot-info .alerte { color: var(--orange); font-weight: 600; }
 .depot-info .ok { color: var(--green); font-weight: 600; }
