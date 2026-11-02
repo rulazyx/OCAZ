@@ -20,12 +20,18 @@
   const ABO = { essai: ['Essai gratuit', 'b-orange'], actif: ['Abonné', 'b-green'], impaye: ['Impayé', 'b-red'], resilie: ['Résilié', 'b-grey'], offert: ['Offert', 'b-purple'] };
   const auj = () => new Date().toISOString().slice(0, 10);
   const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
-  const OBJECTIF = 30, CAP = 100; // 30 abonnés d'ici avril 2027, puis une centaine de garages partenaires
-  // Paliers du nombre de garages partenaires : 5 pour la phase test, 30 d'ici avril 2027, puis 100.
-  const PALIERS = [[5, 'Phase test'], [OBJECTIF, 'Avril 2027'], [CAP, 'Le réseau complet']];
+  // Objectifs : paliers du nombre de garages partenaires (5 pour la phase test, 30 d'ici avril 2027, puis 100).
+  // Modifiables depuis le tableau de bord (réglage « objectifs ») ; le dernier palier est le réseau complet.
+  const PALIERS_DEPART = [[5, 'Phase test'], [30, 'Avril 2027'], [100, 'Le réseau complet']];
+  let PALIERS = PALIERS_DEPART, CAP = 100;
+  function poserPaliers(liste) {
+    const ok = Array.isArray(liste) ? liste.map(([v, l]) => [Math.round(Number(v)), String(l || '').trim()]).filter(([v]) => v > 0) : [];
+    PALIERS = ok.length ? ok.sort((a, b) => a[0] - b[0]) : PALIERS_DEPART;
+    CAP = PALIERS[PALIERS.length - 1][0];
+  }
   const palierSuivant = n => PALIERS.find(([v]) => n < v) || PALIERS[PALIERS.length - 1];
   function paliers(n) {
-    return `<div class="adm-paliers">${PALIERS.map(([v, l], i) => {
+    return `<div class="adm-paliers" style="--n:${PALIERS.length}">${PALIERS.map(([v, l], i) => {
       const bas = i ? PALIERS[i - 1][0] : 0, fait = n >= v, encours = !fait && n >= bas;
       return `<div class="adm-palier${fait ? ' fait' : encours ? ' encours' : ''}">
         <span><b>${fait ? '✓ ' : ''}${v} partenaires</b><small>${l}${encours ? ` · ${n} / ${v}` : ''}</small></span>
@@ -50,6 +56,7 @@
   let tableau = null, prospects = null, leads = null, annonces = null; // chargés à l'ouverture de leur onglet
   let pro = null; // fiche prospect ouverte
   let etapes = null, editionEtapes = false, etapesAvant = null; // mes étapes (tableau de bord)
+  let editionObjectifs = false, objectifsBrouillon = null; // paliers en cours de modification
   let rev = null, app = null; // fiches ouvertes
 
   function toast(msg) {
@@ -90,6 +97,7 @@
       $('#compte-email').textContent = 'Connecté : ' + user.email;
       Messagerie.moderer({ client, bouton: $('#btn-msg') });
       Calendrier.monter({ rpc, toast, vue: $('#vue'), actif: () => onglet === 'calendrier' });
+      await rpc('crm_admin_reglage_lire', { p_cle: 'objectifs' }).then(v => poserPaliers(v?.paliers), () => {});
       await charger();
       rafraichir();
     } catch (err) { $('#auth-texte').textContent = err.message; }
@@ -256,10 +264,11 @@
         ${kpi('Leads (30 jours)', tableau.leads_30j, `${tableau.ventes_reseau_30j} vente(s) grâce au réseau`)}
         ${kpi('Apporteurs actifs', tableau.apporteurs, 'qui envoient des clients')}
       </div>
-      <div class="adm-bloc adm-objectifs">
+      <div class="adm-tete adm-sous-tete"><h3 class="section">Objectifs</h3>${editionObjectifs ? '' : '<button type="button" class="chip" id="objectifs-modifier">Modifier</button>'}</div>
+      ${editionObjectifs ? blocObjectifsEdition() : `<div class="adm-bloc adm-objectifs">
         <div><span>Garages partenaires : <b>${partenaires.length}</b></span>${paliers(partenaires.length)}</div>
         ${signes != null ? `<div><span>Prospection : <b>${signes}</b> signé(s) sur ${prospects.length} garage(s) démarché(s)</span>${barre(signes, Math.max(prospects.length, 1))}</div>` : ''}
-      </div>
+      </div>`}
       ${blocEtapes()}
       ${endormis.length || attente.length ? `<h3 class="section">À surveiller</h3><div class="adm-bloc">
         ${endormis.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>Pas connecté depuis ${joursDepuis(g.derniere_connexion) === Infinity ? 'le début' : joursDepuis(g.derniere_connexion) + ' jours'} : appelle-le avant qu'il résilie.</small></span></div>`).join('')}
@@ -271,6 +280,28 @@
         <tbody>${tableau.garages.map(ligne).join('') || '<tr><td colspan="7">Aucun garage.</td></tr>'}</tbody></table></div>
     </div>`;
   }
+  // Objectifs : un palier par ligne (nombre de garages + libellé), triés du plus petit au plus grand.
+  function blocObjectifsEdition() {
+    return `<div class="adm-bloc" id="objectifs-edition">
+      <p class="hint">Un palier par ligne : nombre de garages partenaires à atteindre et son échéance. Le plus grand est le réseau complet (revenu cible).</p>
+      ${objectifsBrouillon.map(([v, l], i) => `<div class="adm-objectif-edit" data-obj-i="${i}">
+        <input data-ob="v" type="number" inputmode="numeric" min="1" value="${esc(v)}" aria-label="Nombre de garages">
+        <input data-ob="l" value="${esc(l)}" placeholder="Échéance ou nom du palier" aria-label="Libellé">
+        <button type="button" class="chip" data-obj-suppr="${i}" aria-label="Supprimer ce palier">✕</button></div>`).join('')}
+      <button type="button" id="objectif-ajouter">+ Ajouter un palier</button>
+      <div class="adm-publier chips"><button type="button" class="chip" id="objectifs-annuler">Annuler</button><button type="button" class="chip active" id="objectifs-ok">Enregistrer</button></div></div>`;
+  }
+  const lireObjectifs = () => { objectifsBrouillon = [...document.querySelectorAll('#objectifs-edition [data-obj-i]')].map(l => [l.querySelector('[data-ob=v]').value, l.querySelector('[data-ob=l]').value.trim()]); };
+  async function enregistrerObjectifs() {
+    lireObjectifs();
+    if (objectifsBrouillon.some(([v]) => !(Number(v) > 0))) { toast('Chaque palier doit avoir un nombre de garages.'); return; }
+    if (!objectifsBrouillon.length) { toast('Garde au moins un palier.'); return; }
+    poserPaliers(objectifsBrouillon);
+    editionObjectifs = false; afficher();
+    try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'objectifs', p_valeur: { paliers: PALIERS } }); toast('Objectifs enregistrés'); }
+    catch (err) { toast(err.message); }
+  }
+
   // Mes étapes : la feuille de route d'Anthony (reprise du doc « Étapes »), modifiable ici.
   const STATUTS_ETAPE = { a_faire: ['À faire', 'b-grey'], en_cours: ['En cours', 'b-orange'], fait: ['Fait', 'b-green'], plus_tard: ['Plus tard', 'b-purple'] };
   // Préparer la prospection (28/10) : avant d'aller voir les 5 premiers garages testeurs.
@@ -294,12 +325,12 @@
   const AJOUTS = [...PROSPECTION_ETAPES, ...VISION_ETAPES];
   const ETAPES_DEPART = [
     ['1. Valider le marché', 'en_cours', 'Sondage Google Forms en ligne, 60 marchands repérés. Analyser les réponses.'],
-    ["2. Créer l'entreprise", 'plus_tard', 'Micro-entreprise Ocaz, après avoir rencontré les premiers pros (SIREN, compte bancaire, assurance RC pro, marque INPI).'],
+    ["2. Créer l'entreprise", 'fait', 'Micro-entreprise créée : SIREN 132 192 550, SIRET 132 192 550 00011. Reste : compte bancaire pro, assurance RC pro, marque INPI.'],
     ["3. Construire l'appli", 'en_cours', 'Appli pro sur ocaz.re : stock, reprises, dépôt-vente, commandes, administratif, réseau, apporteurs, messagerie, admin.'],
     ["3 bis. Vérifier l'appli", 'en_cours', "Tout vérifier onglet par onglet avec chaque identifiant (admin, revendeur, apporteur) : onglet Vérifications du doc Étapes."],
     ['3 ter. Recherche par plaque', 'en_cours', 'Créer le compte immatriculationapi.com et suivre le guide « Activer la recherche par plaque ».'],
     ['4. Domaine et mail', 'fait', 'ocaz.re = appli pro, reseau.ocaz.re = site public, contact@ocaz.re et signature mail prêts.'],
-    ['5. Pages légales du site', 'en_cours', 'Ajouter le SIREN une fois l\'entreprise créée. Faire relire le contrat apporteur par un juriste.'],
+    ['5. Pages légales du site', 'en_cours', 'SIREN et SIRET ajoutés aux mentions légales. Reste : faire relire le contrat apporteur par un juriste.'],
     ['6. Référencement Google', 'en_cours', 'Search Console fait. Suite : fiche Google Business et annuaires locaux.'],
     ["7. Paiement de l'abonnement", 'a_faire', '69,99 €/mois, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
     ...PROSPECTION_ETAPES,
@@ -329,11 +360,13 @@
     const n = st => liste.filter(e => e.statut === st).length;
     if (editionEtapes) return `<div class="adm-tete adm-sous-tete"><h3 class="section">Mes étapes</h3><span class="chips">
         <button type="button" class="chip" id="etapes-annuler">Annuler</button><button type="button" class="chip active" id="etapes-ok">Enregistrer</button></span></div>
+      <p class="hint">Fais glisser une étape par sa poignée ⠿ pour la déplacer, ou duplique-la avec ⧉.</p>
       <div class="adm-bloc" id="etapes-edition">${liste.map((e, i) => `<div class="adm-etape-edit" data-etape-i="${i}">
+          <button type="button" class="adm-poignee" data-poignee aria-label="Déplacer l'étape (glisser)" title="Glisser pour déplacer">⠿</button>
           <input data-ee="titre" value="${esc(e.titre)}" placeholder="Étape" aria-label="Étape">
           <select data-ee="statut" aria-label="Statut">${Object.entries(STATUTS_ETAPE).map(([k, [l]]) => `<option value="${k}"${e.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
           <textarea data-ee="suite" rows="2" placeholder="Prochain pas" aria-label="Prochain pas">${esc(e.suite)}</textarea>
-          <span class="chips"><button type="button" class="chip" data-etape-monter="${i}" aria-label="Monter">↑</button><button type="button" class="chip" data-etape-suppr="${i}" aria-label="Supprimer l'étape">✕</button></span></div>`).join('')}
+          <span class="chips"><button type="button" class="chip" data-etape-monter="${i}" aria-label="Monter">↑</button><button type="button" class="chip" data-etape-dupliquer="${i}" aria-label="Dupliquer l'étape" title="Dupliquer">⧉</button><button type="button" class="chip" data-etape-suppr="${i}" aria-label="Supprimer l'étape">✕</button></span></div>`).join('')}
         <button type="button" id="etape-ajouter">+ Ajouter une étape</button></div>`;
     return `<div class="adm-tete adm-sous-tete"><h3 class="section">Mes étapes <small class="hint">${n('fait')} faite(s) sur ${liste.length} · ${n('en_cours')} en cours</small></h3>
         <button type="button" class="chip" id="etapes-modifier">Modifier</button></div>
@@ -346,6 +379,32 @@
   function lireEtapes() {
     etapes = [...document.querySelectorAll('#etapes-edition [data-etape-i]')].map(l => ({ ...etapes[Number(l.dataset.etapeI)],
       titre: l.querySelector('[data-ee=titre]').value.trim(), statut: l.querySelector('[data-ee=statut]').value, suite: l.querySelector('[data-ee=suite]').value.trim() }));
+  }
+  // Glisser-déposer des étapes (souris et doigt) : la ligne suit le pointeur, l'ordre est relu à la fin.
+  function glisserEtape(e) {
+    const h = e.target.closest('[data-poignee]');
+    if (!h || e.button > 0) return;
+    const ligne = h.closest('[data-etape-i]'), boite = ligne.parentElement;
+    e.preventDefault();
+    ligne.classList.add('glisse');
+    let defile = 0;
+    const bouger = ev => {
+      ev.preventDefault();
+      defile = ev.clientY < 70 ? -14 : ev.clientY > innerHeight - 70 ? 14 : 0;
+      const cible = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('#etapes-edition [data-etape-i]');
+      if (!cible || cible === ligne) return;
+      const r = cible.getBoundingClientRect();
+      boite.insertBefore(ligne, ev.clientY < r.top + r.height / 2 ? cible : cible.nextSibling);
+    };
+    const minuterie = setInterval(() => { if (defile) window.scrollBy(0, defile); }, 30);
+    const fin = () => {
+      clearInterval(minuterie);
+      document.removeEventListener('pointermove', bouger); document.removeEventListener('pointerup', fin); document.removeEventListener('pointercancel', fin);
+      ligne.classList.remove('glisse');
+      lireEtapes(); afficher();
+    };
+    // Écoute sur le document : déplacer la ligne dans la page ferait perdre la capture du pointeur.
+    document.addEventListener('pointermove', bouger); document.addEventListener('pointerup', fin); document.addEventListener('pointercancel', fin);
   }
   async function enregistrerEtapes() {
     try { await rpc('crm_admin_reglage_ecrire', { p_cle: 'etapes', p_valeur: { liste: etapes, connues: AJOUTS.map(e => e[3]) } }); toast('Étapes enregistrées'); }
@@ -386,11 +445,11 @@
     $('#vue').innerHTML = `<div class="ap-page">
       <div class="adm-tete"><h2>Prospection</h2><span class="chips">
         <button type="button" id="btn-importer">Importer un fichier CSV</button>
-        <button type="button" class="primary" id="btn-pro-ajouter">${icon('plus', 18)}<span>Ajouter un garage</span></button></span></div>
+        <button type="button" class="jaune" id="btn-pro-ajouter">${icon('plus', 18)}<span>Nouvel entretien</span></button></span></div>
       ${prospects.length ? `<div class="kpis">
         ${kpi('Garages à démarcher', prospects.length, `${prospects.filter(enCours).length} en cours`)}
         ${kpi('Démos faites', demos, prospects.length ? Math.round(demos / prospects.length * 100) + ' % des garages' : '')}
-        ${kpi('Signés', signes, demos ? Math.round(signes / demos * 100) + ' % des démos' : 'premier palier : 5 partenaires')}
+        ${kpi('Signés', signes, demos ? Math.round(signes / demos * 100) + ' % des démos' : `premier palier : ${PALIERS[0][0]} partenaires`)}
         ${kpi('À relancer', aRelancer.length, aRelancer.length ? "aujourd'hui ou en retard" : 'rien en retard', aRelancer.length ? 'negatif' : '')}
       </div>
       <div class="adm-entonnoir">${Object.entries(ETAPES).map(([k, [l, cls]]) => `<button type="button" class="adm-etape" data-filtre-pro="${k}"><span class="badge ${cls}">${l}</span><b>${n(k)}</b></button>`).join('')}</div>` : ''}
@@ -399,7 +458,7 @@
       <div class="adm-outils"><div class="chips">${FILTRES.map(([k, l, c]) => `<button type="button" class="chip${filtrePro === k ? ' active' : ''}" data-filtre-pro="${k}">${l} (${c})</button>`).join('')}</div>
         <div class="search"><span class="ap-loupe">${icon('recherche', 18)}</span><input id="adm-q" type="search" placeholder="Rechercher un garage…" value="${esc(q)}" autocomplete="off"></div></div>
       <div class="adm-bloc adm-abo-liste">${liste.length ? liste.map(lignePro).join('')
-        : `<div class="empty"><strong>${prospects.length ? 'Aucun résultat' : 'Aucun garage à démarcher'}</strong><span>${prospects.length ? 'Essaie un autre filtre.' : 'Importe ta liste (le fichier prospects.csv des 60 marchands) ou ajoute un garage.'}</span></div>`}</div>
+        : `<div class="empty"><strong>${prospects.length ? 'Aucun résultat' : 'Aucun garage à démarcher'}</strong><span>${prospects.length ? 'Essaie un autre filtre.' : 'Importe ta liste (le fichier prospects.csv des 60 marchands) ou lance un nouvel entretien.'}</span></div>`}</div>
     </div>`;
   }
   async function chargerProspects() {
@@ -412,66 +471,48 @@
     if (msg) toast(msg);
     return id;
   }
-  // Fiche d'entretien : les questions du speech de visite, à remplir par points pendant le rendez-vous (enregistrée toute seule).
+  // Fiche d'entretien (refonte du 02/11) : les outils utilisés en premier, puis le garage, la préparation, l'administratif,
+  // la vente et la conclusion. Enregistrée toute seule. La personne rencontrée est dans l'en-tête, avec la date.
+  const OUI_NON = ['Oui', 'Non'];
   const ENTRETIEN = [
-    ['Le garage', [
-      ['rencontre', 'Personne rencontrée', 'texte'],
-      ['equipe', 'Installé depuis / nombre de personnes', 'texte'],
-      ['ventesMois', 'Ventes par mois', 'nombre'],
-      ['stock', 'Véhicules en stock', 'nombre'],
-      ['achats', 'Où il achète ses voitures', 'multi', ['Reprises clients', 'Particuliers', 'Enchères', 'Import métropole', 'Autre garage']],
-      ['depot', 'Fait du dépôt-vente', 'choix', ['Oui', 'Non', 'Parfois']],
-      ['roles', 'Qui vend, qui fait les papiers, qui répond aux annonces', 'long'],
-    ]],
-    ['Ce qui l\'énerve aujourd\'hui', [
-      ['accroche', '« Vos offres, factures, livre de police, vous les faites comment ? »', 'long'],
-    ]],
-    ['Préparation et contrôle technique', [
-      ['prepaQui', 'Qui prépare les voitures', 'choix', ['Lui-même', 'Son atelier', 'Préparateur extérieur']],
-      ['prepaCout', 'Coût moyen d\'une préparation (€)', 'nombre'],
-      ['fraisNotes', 'Note ses frais pour connaître sa vraie marge', 'choix', ['Oui', 'Non', 'Approximativement']],
-      ['ct', 'Contrôle technique (centre, avant ou après la vente)', 'texte'],
-      ['revision', 'Atelier d\'entretien / rappelle les clients pour la révision', 'choix', ['Oui', 'Atelier mais pas de rappel', 'Non']],
-    ]],
-    ['Administratif', [
-      ['police', 'Livre de police', 'choix', ['Papier', 'Logiciel', 'Excel', 'Pas tenu']],
-      ['siv', 'Cartes grises (SIV)', 'choix', ['Habilité SIV', 'Prestataire', 'Ne sait pas']],
-      ['wGarage', 'W garage', 'choix', ['Oui', 'Non']],
-      ['factures', 'Offres, bons de commande, factures, TVA sur marge', 'texte'],
-      ['paperasse', 'La paperasse qui lui prend le plus de temps', 'texte'],
-      ['comptable', 'Ce que son comptable lui demande', 'texte'],
-    ]],
-    ['Vente et clients', [
-      ['clients', 'D\'où viennent ses clients', 'multi', ['Leboncoin', 'Facebook', 'Bouche-à-oreille', 'Passage', 'La Centrale', 'Site du garage']],
-      ['annonces', 'Temps par jour à répondre aux annonces', 'texte'],
-      ['apporteurs', 'Déjà des gens qui lui ramènent des clients contre commission', 'choix', ['Oui', 'Non']],
-      ['autresGarages', 'Travaille avec d\'autres garages', 'choix', ['Oui', 'Non']],
-    ]],
-    ['Outils actuels', [
-      ['logiciel', 'Logiciel aujourd\'hui', 'multi', ['Spider VO', 'Autre logiciel', 'Excel', 'Papier', 'Rien']],
+    ['Outils utilisés', [
+      ['logiciel', 'Outils actuels', 'multi', ['Spider VO', 'Autre logiciel', 'Excel', 'Papier', 'Rien']],
       ['logicielCout', 'Combien il paie par mois (€)', 'nombre'],
       ['logicielAvis', 'Ce qui lui plaît / ce qui l\'énerve dedans', 'long'],
-      ['support', 'Travaille plutôt sur', 'choix', ['Téléphone', 'Ordinateur', 'Les deux']],
     ]],
-    ['Démo', [
-      ['reactions', 'Ce qui l\'a fait réagir', 'multi', ['Stock et marge réelle', 'Reprise par plaque', 'Offre → facture TVA sur marge', 'Livre de police', 'Réseau d\'apporteurs', 'Site et vitrine', 'Rappel révision', 'Dépôt-vente']],
-      ['demoNotes', 'Remarques pendant la démo', 'long'],
+    ['Le garage', [
+      ['depot', 'Dépôt-vente', 'choix', OUI_NON],
+      ['achat', 'Achat-revente', 'choix', OUI_NON],
+      ['accroche', 'Ce qui vous énerve aujourd\'hui', 'long'],
     ]],
-    ['Conclusion', [
-      ['note', 'Sur 10, ça lui servirait combien', 'note'],
-      ['manque', 'Ce qui manque pour avoir 10', 'long'],
-      ['baguette', 'Baguette magique : ce qu\'il changerait en premier', 'long'],
-      ['prix', 'Prix par mois qui lui paraît correct (€)', 'nombre'],
+    ['Préparation', [
+      ['prepaQui', 'Qui prépare les voitures', 'choix', ['Lui-même', 'Son atelier', 'Préparateur extérieur']],
+      ['contratService', 'Contrat de service', 'choix', OUI_NON],
+      ['revision', 'L\'atelier rappelle le client pour la révision', 'choix', OUI_NON],
+    ]],
+    ['Administratif', [
+      ['police', 'Livre de police', 'choix', ['Papier', 'Excel', 'Logiciel', 'Non']],
+      ['siv', 'Cartes grises', 'choix', ['Habilité', 'Prestataire', 'Ne sait pas']],
+      ['wGarage', 'W garage', 'choix', OUI_NON],
+    ]],
+    ['Ventes et clients', [
+      ['note', 'Utilité sur 10', 'note'],
+      ['baguette', 'Ce qu\'il changerait', 'long'],
       ['objections', 'Objections', 'multi', ['Déjà un logiciel', 'Le papier ça marche', 'Pas le temps', 'Trop cher', 'Mes données', 'Les apporteurs', 'Vraie entreprise ?']],
-      ['objectionsNotes', 'Détail des objections et questions à reprendre', 'long'],
-      ['testeur', 'Garage testeur', 'choix', ['Oui', 'Hésite', 'Non']],
-      ['sondage', 'Sondage proposé', 'choix', ['Rempli sur place', 'Envoyé par WhatsApp', 'Non']],
-      ['recommande', 'Autres garagistes à aller voir', 'texte'],
-      ['suite', 'Prochaine étape convenue', 'texte'],
+      ['objectionsNotes', 'Détail des objections', 'long'],
+      ['testeur', 'Intéressé par un test', 'choix', ['Oui', 'Hésite', 'Non']],
     ]],
   ];
-  const remplis = en => ENTRETIEN.flatMap(([, ch]) => ch).filter(([k]) => { const v = en?.[k]; return Array.isArray(v) ? v.length : v != null && v !== ''; }).length;
-  const NB_CHAMPS = ENTRETIEN.reduce((s, [, ch]) => s + ch.length, 0);
+  const REPRISES = { depot: { Parfois: 'Oui' }, revision: { 'Atelier mais pas de rappel': 'Non' }, police: { 'Pas tenu': 'Non' }, siv: { 'Habilité SIV': 'Habilité' } };
+  // Réponses de l'ancien questionnaire (avant la refonte) : gardées et affichées à part, en lecture seule.
+  const ANCIENS = { equipe: 'Installé depuis / nombre de personnes', ventesMois: 'Ventes par mois', stock: 'Véhicules en stock', achats: 'Où il achète ses voitures',
+    roles: 'Qui vend, qui fait les papiers', prepaCout: 'Coût moyen d\'une préparation (€)', fraisNotes: 'Note ses frais', ct: 'Contrôle technique',
+    factures: 'Offres, bons de commande, factures', paperasse: 'Paperasse la plus longue', comptable: 'Ce que son comptable demande', clients: 'D\'où viennent ses clients',
+    annonces: 'Temps passé sur les annonces', apporteurs: 'Déjà des apporteurs', autresGarages: 'Travaille avec d\'autres garages', support: 'Travaille plutôt sur',
+    reactions: 'Ce qui l\'a fait réagir en démo', demoNotes: 'Remarques pendant la démo', manque: 'Ce qui manque pour avoir 10', prix: 'Prix par mois correct (€)',
+    sondage: 'Sondage proposé', recommande: 'Autres garagistes à aller voir', suite: 'Prochaine étape convenue' };
+  const remplis = en => [['rencontre'], ...ENTRETIEN.flatMap(([, ch]) => ch)].filter(([k]) => { const v = en?.[k]; return Array.isArray(v) ? v.length : v != null && v !== ''; }).length;
+  const NB_CHAMPS = ENTRETIEN.reduce((s, [, ch]) => s + ch.length, 1);
   function rendreEntretien() {
     const en = pro.entretien || {};
     const champ = ([k, l, type, opts]) => {
@@ -485,10 +526,16 @@
       if (type === 'long') return `<div class="field full"><label for="en-${k}">${esc(l)}</label><textarea id="en-${k}" data-en="${k}" rows="2">${esc(v || '')}</textarea></div>`;
       return `<div class="field${type === 'nombre' ? '' : ' full'}"><label for="en-${k}">${esc(l)}</label><input id="en-${k}" data-en="${k}" ${type === 'nombre' ? 'type="number" inputmode="decimal"' : 'type="text"'} value="${esc(v ?? '')}" autocomplete="off"></div>`;
     };
-    return `<div class="adm-en-tete"><div class="field"><label for="en-date">Date de l'entretien</label><input id="en-date" data-en="date" type="date" value="${esc(en.date || auj())}"></div>
+    const anciens = Object.entries(ANCIENS).filter(([k]) => { const v = en[k]; return Array.isArray(v) ? v.length : v != null && v !== ''; });
+    return `<div class="adm-en-tete">
+        ${pro.id ? '' : `<div class="field"><label for="en-nom">Nom du garage *</label><input id="en-nom" data-pf-miroir="nom" value="${esc(pro.nom || '')}" autocomplete="off"></div>`}
+        <div class="field"><label for="en-rencontre">Nom de la personne rencontrée</label><input id="en-rencontre" data-en="rencontre" value="${esc(en.rencontre || '')}" autocomplete="off"></div>
+        <div class="field"><label for="en-date">Date de l'entretien</label><input id="en-date" data-en="date" type="date" value="${esc(en.date || auj())}"></div>
         <span class="hint" id="pro-etat">${remplis(en)} point(s) sur ${NB_CHAMPS} · enregistré automatiquement</span></div>
       ${ENTRETIEN.map(([titre, champs], i) => `<details class="adm-en-section"${i < 2 || champs.some(([k]) => en[k] != null && en[k] !== '' && !(Array.isArray(en[k]) && !en[k].length)) ? ' open' : ''}>
-        <summary>${esc(titre)}</summary><div class="grid">${champs.map(champ).join('')}</div></details>`).join('')}`;
+        <summary>${esc(titre)}</summary><div class="grid">${champs.map(champ).join('')}</div></details>`).join('')}
+      ${anciens.length ? `<details class="adm-en-section"><summary>Ancien questionnaire (${anciens.length})</summary>
+        <dl class="adm-en-anciens">${anciens.map(([k, l]) => `<dt>${esc(l)}</dt><dd>${esc(Array.isArray(en[k]) ? en[k].join(', ') : en[k])}</dd>`).join('')}</dl></details>` : ''}`;
   }
   // Enregistrement automatique, une seconde après la dernière saisie (et à la fermeture de la fiche).
   function planifierSauvegarde() {
@@ -513,18 +560,20 @@
       if (onglet === 'prospection' && !$('#dlg-pro').open) afficher();
     } catch (err) { if (etat) etat.textContent = 'Pas enregistré : ' + err.message; }
   }
-  function ouvrirProspect(id, base) {
+  function ouvrirProspect(id, base, vueDepart) {
     pro = id ? { ...prospects.find(p => p.id === id) } : { etape: 'a_contacter', ...(base || {}) };
     pro.entretien = { ...(pro.entretien || {}) };
-    $('#pro-titre').textContent = id ? pro.nom : 'Ajouter un garage à démarcher';
+    // Réponses de l'ancien questionnaire ramenées aux nouveaux choix.
+    Object.entries(REPRISES).forEach(([k, m]) => { if (m[pro.entretien[k]]) pro.entretien[k] = m[pro.entretien[k]]; });
+    $('#pro-titre').textContent = id ? pro.nom : 'Nouvel entretien';
     $('#pro-suppr').hidden = !id;
     const g = pro.entreprise_id && revendeurs.find(x => x.id === pro.entreprise_id);
     const ch = (k, l, cls, type) => `<div class="field ${cls || ''}"><label for="pf-${k}">${l}</label><input id="pf-${k}" data-pf="${k}" type="${type || 'text'}" value="${esc(pro[k] || '')}" autocomplete="off"></div>`;
     const nEn = remplis(pro.entretien);
     $('#pro-body').innerHTML = `
-      <div class="segmented adm-pro-vues"><button type="button" data-pro-vue="fiche" class="active">Fiche</button>
-        <button type="button" data-pro-vue="entretien">Entretien${nEn ? ` (${nEn})` : ''}</button></div>
-      <div id="pro-fiche">
+      <div class="segmented adm-pro-vues"><button type="button" data-pro-vue="fiche"${vueDepart === 'entretien' ? '' : ' class="active"'}>Fiche</button>
+        <button type="button" data-pro-vue="entretien"${vueDepart === 'entretien' ? ' class="active"' : ''}>Entretien${nEn ? ` (${nEn})` : ''}</button></div>
+      <div id="pro-fiche"${vueDepart === 'entretien' ? ' hidden' : ''}>
       <div class="grid">${ch('nom', 'Nom du garage *', 'full')}${ch('ville', 'Ville')}${ch('contact', 'Personne à voir')}${ch('telephone', 'Téléphone', '', 'tel')}${ch('email', 'Email', '', 'email')}</div>
       <h3 class="section">Suivi</h3>
       <div class="grid"><div class="field"><label for="pf-etape">Étape</label><select id="pf-etape" data-pf="etape">${Object.entries(ETAPES).map(([k, [l]]) => `<option value="${k}"${pro.etape === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
@@ -533,7 +582,7 @@
       ${id ? `<div class="adm-bloc">${g ? `<div class="adm-compte"><span>Compte revendeur créé<small>${esc(g.nom)}</small></span><button type="button" class="chip" data-voir-rev="${esc(g.id)}">Voir sa fiche</button></div>`
         : `<div class="adm-compte"><span>Il a dit oui ?<small>Crée son compte revendeur : ses infos sont reprises et son essai gratuit démarre.</small></span><button type="button" class="chip" id="pro-convertir">Créer son compte</button></div>`}</div>` : ''}
       </div>
-      <div id="pro-entretien" hidden>${rendreEntretien()}</div>`;
+      <div id="pro-entretien"${vueDepart === 'entretien' ? '' : ' hidden'}>${rendreEntretien()}</div>`;
     $('#dlg-pro').showModal();
   }
   function lireProspect() {
@@ -718,7 +767,47 @@
           <input data-pk="montant" type="number" inputmode="decimal" value="${esc(p.montant)}" placeholder="€" aria-label="Montant (€)">
           <label class="check"><input type="checkbox" data-pk="coche"${p.coche ? ' checked' : ''}><span>Par défaut</span></label>
           <button type="button" class="chip" data-pk-suppr="${i}" aria-label="Supprimer ce pack">✕</button></div>`).join('') || '<span class="hint">Aucun pack.</span>'}
-        <button type="button" id="rev-pack-ajouter">+ Ajouter un pack</button></div>`;
+        <button type="button" id="rev-pack-ajouter">+ Ajouter un pack</button></div>
+
+      ${r.id && !r.demo && !r.admin ? `<h3 class="section adm-danger-titre">Supprimer ce garage</h3>
+      <div class="adm-bloc adm-danger">
+        <p>Efface définitivement <b>${esc(r.infos.nom)}</b> : ses comptes de connexion, son stock et ses véhicules, ses clients, offres et factures,
+          ses photos et documents, sa vitrine, ses annonces sur le réseau, ses leads et ses messages. <b>Impossible à annuler.</b></p>
+        <p class="hint">Sa fiche de prospection est gardée. Pense à exporter ce qui doit être conservé (factures, livre de police) avant.</p>
+        <div class="field"><label for="rev-suppr-nom">Pour confirmer, tape le nom du garage : <b>${esc(r.infos.nom)}</b></label>
+          <input id="rev-suppr-nom" autocomplete="off" spellcheck="false"></div>
+        <div class="adm-publier"><button type="button" class="danger plein" id="rev-supprimer" disabled>Supprimer définitivement</button></div></div>` : ''}`;
+  }
+  // Suppression complète : la base (comptes, véhicules, leads, messages…) puis les fichiers rangés dans le dossier du garage.
+  async function supprimerRevendeur() {
+    const id = rev.id, nom = rev.infos.nom;
+    if (norm($('#rev-suppr-nom').value.trim()) !== norm(nom)) { toast('Le nom ne correspond pas.'); return; }
+    const btn = $('#rev-supprimer');
+    btn.disabled = true; btn.textContent = 'Suppression…';
+    try { await rpc('crm_admin_revendeur_supprimer', { p_id: id }); }
+    catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Supprimer définitivement'; return; }
+    let restes = 0;
+    for (const bucket of ['photos', 'documents']) {
+      try { const chemins = await fichiersDe(bucket, id); for (let i = 0; i < chemins.length; i += 100) { const { error } = await client.storage.from(bucket).remove(chemins.slice(i, i + 100)); if (error) restes++; } }
+      catch (e) { restes++; }
+    }
+    $('#dlg-rev').close();
+    toast(restes ? `${nom} supprimé (quelques fichiers n'ont pas pu être effacés)` : `${nom} supprimé`);
+    tableau = null;
+    await charger();
+  }
+  // Tous les fichiers d'un dossier du stockage, sous-dossiers compris.
+  async function fichiersDe(bucket, dossier) {
+    const out = [];
+    for (let page = 0; ; page++) {
+      const { data, error } = await client.storage.from(bucket).list(dossier, { limit: 1000, offset: page * 1000 });
+      if (error) throw error;
+      for (const f of data || []) {
+        const chemin = `${dossier}/${f.name}`;
+        if (f.id) out.push(chemin); else out.push(...await fichiersDe(bucket, chemin));
+      }
+      if (!data || data.length < 1000) return out;
+    }
   }
   function lireRevendeur() {
     rev.email = ($('#rev-email')?.value || '').trim().toLowerCase();
@@ -848,13 +937,23 @@
         editionEtapes = false; afficher(); enregistrerEtapes(); return;
       }
       if (e.target.id === 'etape-ajouter') { lireEtapes(); etapes.push({ id: nouvelId(), titre: '', statut: 'a_faire', suite: '' }); afficher(); return; }
+      if (e.target.dataset.etapeDupliquer != null) {
+        lireEtapes(); const i = Number(e.target.dataset.etapeDupliquer);
+        etapes.splice(i + 1, 0, { ...etapes[i], id: nouvelId(), titre: etapes[i].titre + ' (copie)' });
+        afficher(); document.querySelector(`#etapes-edition [data-etape-i="${i + 1}"] [data-ee=titre]`)?.focus(); return;
+      }
+      if (e.target.id === 'objectifs-modifier') { objectifsBrouillon = PALIERS.map(x => [...x]); editionObjectifs = true; afficher(); return; }
+      if (e.target.id === 'objectifs-annuler') { editionObjectifs = false; afficher(); return; }
+      if (e.target.id === 'objectifs-ok') { enregistrerObjectifs(); return; }
+      if (e.target.id === 'objectif-ajouter') { lireObjectifs(); const d = objectifsBrouillon[objectifsBrouillon.length - 1]; objectifsBrouillon.push([d ? Number(d[0]) * 2 || '' : 5, '']); afficher(); return; }
+      if (e.target.dataset.objSuppr != null) { lireObjectifs(); objectifsBrouillon.splice(Number(e.target.dataset.objSuppr), 1); afficher(); return; }
       if (e.target.dataset.etapeSuppr != null) { lireEtapes(); etapes.splice(Number(e.target.dataset.etapeSuppr), 1); afficher(); return; }
       if (e.target.dataset.etapeMonter != null) {
         lireEtapes(); const i = Number(e.target.dataset.etapeMonter);
         if (i > 0) [etapes[i - 1], etapes[i]] = [etapes[i], etapes[i - 1]];
         afficher(); return;
       }
-      if (e.target.closest('#btn-pro-ajouter')) { ouvrirProspect(null); return; }
+      if (e.target.closest('#btn-pro-ajouter')) { ouvrirProspect(null, null, 'entretien'); return; }
       if (e.target.closest('#btn-importer')) { $('#pro-fichier').click(); return; }
       if (e.target.closest('#btn-publier')) { publierAnnonce(); return; }
       const pr = e.target.closest('[data-pro]');
@@ -877,6 +976,7 @@
       const a = e.target.closest('[data-app]');
       if (a) ouvrirApporteur(a.dataset.app);
     });
+    $('#vue').addEventListener('pointerdown', glisserEtape);
     $('#vue').addEventListener('change', e => {
       if (e.target.dataset.abo) changerAbo(e.target.dataset.abo, e.target.value, e.target);
       const eid = e.target.dataset.etapeStatut;
@@ -899,7 +999,11 @@
       if (e.target.dataset.droit === 'reseau') $('#rev-com').hidden = !e.target.checked;
       if (e.target.id === 'abo-debut') { lireRevendeur(); rendreRevendeur(); }
     });
+    $('#rev-body').addEventListener('input', e => {
+      if (e.target.id === 'rev-suppr-nom') $('#rev-supprimer').disabled = norm(e.target.value.trim()) !== norm(rev.infos.nom);
+    });
     $('#rev-body').addEventListener('click', async e => {
+      if (e.target.id === 'rev-supprimer') { supprimerRevendeur(); return; }
       if (e.target.id === 'rev-pack-ajouter') { lireRevendeur(); rev.packs.push({ id: nouvelId(), nom: '', montant: '', coche: false }); rendreRevendeur(); return; }
       const s = e.target.dataset.pkSuppr;
       if (s != null) { lireRevendeur(); rev.packs.splice(Number(s), 1); rendreRevendeur(); return; }
@@ -927,6 +1031,9 @@
       try { await rpc('crm_admin_prospect_supprimer', { p_id: pro.id }); $('#dlg-pro').close(); await chargerProspects(); } catch (err) { toast(err.message); }
     });
     $('#pro-body').addEventListener('input', e => {
+      // Nom du garage saisi dans l'entretien : recopié dans la fiche (et inversement).
+      if (e.target.dataset.pfMiroir) { const f = $('#pf-nom'); if (f) f.value = e.target.value; planifierSauvegarde(); return; }
+      if (e.target.id === 'pf-nom' && $('#en-nom')) $('#en-nom').value = e.target.value;
       const k = e.target.dataset.en;
       if (k) { pro.entretien[k] = e.target.value; planifierSauvegarde(); }
     });

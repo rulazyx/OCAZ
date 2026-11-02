@@ -2,7 +2,6 @@
 // Un client cherche un modèle qu'on n'a pas ? On appelle le garage qui l'a.
 const Partenaires = (() => {
   let garages = null, charge = 0, enCours = null;
-  const urls = new Map();
 
   const vehicules = () => (garages || []).flatMap(g => (g.vehicules || []).map(v => ({ g, v })));
   const nombre = () => (garages ? vehicules().length : '…');
@@ -16,19 +15,9 @@ const Partenaires = (() => {
       garages = error ? [] : data || [];
       charge = Date.now();
       if (error) console.error(error);
-      await signer(vehicules().map(x => (x.v.photos || [])[0]).filter(Boolean));
       if (onglet === 'stock') { $('#filters').dataset.vue = ''; render(); }
     })().finally(() => { enCours = null; });
     return enCours;
-  }
-  // Photos privées des véhicules partagés : adresses temporaires.
-  async function signer(chemins) {
-    const manquants = chemins.filter(p => !urls.has(p));
-    if (!manquants.length) return;
-    try {
-      const { data } = await Sync.client.storage.from('photos').createSignedUrls(manquants, 3600);
-      (data || []).forEach(x => { if (x.signedUrl) urls.set(x.path, x.signedUrl); });
-    } catch (e) { /* photos indisponibles */ }
   }
 
   function filtresHtml() { return ''; }
@@ -40,15 +29,16 @@ const Partenaires = (() => {
     $('#count').textContent = garages ? `${liste.length} véhicule${liste.length > 1 ? 's' : ''} chez les garages partenaires` : 'Chargement des véhicules partenaires…';
     if (!garages) { $('#list').innerHTML = ''; return; }
     $('#list').innerHTML = liste.length ? liste.map(({ g, v }) => {
-      const u = urls.get((v.photos || [])[0]);
+      const nom = [v.marque, v.modele, v.finition].filter(Boolean).join(' ');
       return `<div class="card partenaire" data-partenaire="${esc(g.entreprise_id)}" data-pv="${esc(v.id)}">
-        ${u ? `<div class="thumb"><img src="${esc(u)}" alt="" loading="lazy"></div>` : ''}
-        <div class="top"><span class="title">${esc([v.marque, v.modele, v.finition].filter(Boolean).join(' '))}</span>
+        ${Visionneuse.carrousel((v.photos || []).map(chemin => ({ chemin })), { alt: nom + ', photo', classe: 'car-carte' })}
+        <div class="top"><span class="title">${esc(nom)}</span>
           <span class="c-badges">${v.reserve ? '<span class="badge b-orange">Réservé</span>' : ''}<span class="badge b-grey">${esc(g.garage?.nom || 'Garage')}</span></span></div>
         <div class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite, v.type, v.couleur].filter(Boolean).join(' · '))}</div>
         <div class="top"><span class="sub">${esc(g.garage?.ville || '')}</span><span class="price">${euros(v.prix) || 'Prix sur demande'}</span></div></div>`;
     }).join('') : `<div class="empty">${ILLUS.stock}<strong>${vehicules().length ? 'Aucun résultat' : 'Aucun véhicule partenaire pour le moment'}</strong>
       <span>${vehicules().length ? 'Essaie une autre recherche.' : 'Les garages du réseau Ocaz qui partagent leurs véhicules apparaissent ici.'}</span></div>`;
+    Photos.hydrater($('#list'));
   }
 
   // Fiche d'un véhicule partenaire : appeler ou écrire au garage.
@@ -70,7 +60,8 @@ const Partenaires = (() => {
     ].filter(Boolean);
     $('#actions-titre').textContent = nom;
     $('#actions-sous').textContent = [v.annee, km(v.kilometrage), v.carburant, v.boite, euros(v.prix), gg.nom, gg.ville].filter(Boolean).join(' · ');
-    $('#actions-liste').innerHTML = (v.texte ? `<p class="hint" style="white-space:pre-line">${esc(v.texte)}</p>` : '')
+    $('#actions-liste').innerHTML = Visionneuse.carrousel((v.photos || []).map(chemin => ({ chemin })), { alt: nom + ', photo', zoom: true, classe: 'car-fiche' })
+      + (v.texte ? `<p class="hint" style="white-space:pre-line">${esc(v.texte)}</p>` : '')
       + (actions.length ? actions.map(([l], i) => `<button type="button" data-action="${i}">${esc(l)}</button>`).join('') : '<p class="hint">Ce garage n\'a pas laissé de coordonnées.</p>');
     $('#actions-liste').onclick = ev => {
       const b = ev.target.closest('[data-action]');
@@ -79,6 +70,7 @@ const Partenaires = (() => {
       actions[b.dataset.action][1]();
     };
     $('#dlg-actions').showModal();
+    Photos.hydrater($('#actions-liste'));
     return true;
   }
 

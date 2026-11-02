@@ -296,11 +296,14 @@ const TABS = {
       const prix = reprise ? (v.prixPropose ? 'Proposé ' + euros(v.prixPropose) : '') : euros(v.prixVente);
       const marge = Depot.est(v) ? (v.prixVente ? Depot.commission(v) - Prepa.frais(v) : null)
         : !reprise && v.prixVente && v.prixAchat ? num(v.prixVente) - num(v.prixAchat) - Prepa.frais(v) : null;
-      return `${v.image ? `<div class="thumb"><img src="${esc(v.image)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></div>` : ''}
+      // Photos prises : elles défilent dans la carte (doigt ou flèches). Sinon l'image du modèle.
+      const photos = v.photos || [];
+      return `${photos.length ? Visionneuse.carrousel(photos.map(chemin => ({ chemin })), { alt: vehiculeNom(v) + ', photo', classe: 'car-carte' })
+        : v.image ? `<div class="thumb"><img src="${esc(v.image)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></div>` : ''}
         <div class="top"><span class="title">${esc(vehiculeNom(v))}</span>
         <span class="c-badges">${Depot.est(v) ? '<span class="badge b-purple">Dépôt-vente</span>' : ''}${Reseau.actif() && Reseau.partage(v) && ['En stock', 'Réservé'].includes(v.statut) ? '<span class="badge b-blue" title="Partagé au réseau Ocaz">Réseau</span>' : ''}<span class="badge ${STATUT_VEHICULE[v.statut] || 'b-grey'}">${esc(libStatut(v.statut))}</span></span></div>
         <div class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite, v.type, v.couleur].filter(Boolean).join(' · '))}</div>
-        ${(v.photos || []).length ? `<div class="sub">📷 ${v.photos.length} photo(s)</div>` : Photos.deblocable(v) ? '<div class="sub">📷 Photos à prendre</div>' : ''}
+        ${!photos.length && Photos.deblocable(v) ? '<div class="sub">📷 Photos à prendre</div>' : ''}
         ${v.statut === 'En préparation' ? `<div class="sub">🔧 Préparation ${v.prepa ? Prepa.avancement(v) + ' · frais ' + (euros(Prepa.fraisReels(v)) || '0 €') : 'à commencer'}</div>` : ''}
         ${!reprise && interessesPar(v).length ? `<div class="sub">★ ${interessesPar(v).length} client(s) intéressé(s)</div>` : ''}
         ${clientsQuiCherchent(v).length ? `<div class="sub">🔎 ${clientsQuiCherchent(v).length} client(s) cherchent ce véhicule</div>` : ''}
@@ -425,6 +428,7 @@ function render() {
   $('#list').innerHTML = n
     ? rows.map(r => `<div class="card" data-id="${r.id}">${tab.card(r)}</div>`).join('')
     : `<div class="empty">${ILLUS[ONGLETS[onglet].icon] || ILLUS.stock}<strong>${t1}</strong><span>${t2}</span></div>`;
+  if (n) Photos.hydrater($('#list'));
 }
 
 const sigFiltres = () => onglet + vueStock + vueDepot + Droits.achat() + JSON.stringify(filtresStock) + filtreReprise + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()

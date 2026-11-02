@@ -1492,3 +1492,47 @@ end $$;
 
 revoke execute on function public.crm_admin_agenda(date, date), public.crm_admin_agenda_enregistrer(jsonb), public.crm_admin_agenda_supprimer(uuid) from public, anon;
 grant execute on function public.crm_admin_agenda(date, date), public.crm_admin_agenda_enregistrer(jsonb), public.crm_admin_agenda_supprimer(uuid) to authenticated;
+
+-- =====================================================================================================
+-- Admin : suppression complète d'un garage (accès, véhicules, vitrine, réseau, leads, messagerie).
+-- Les photos et documents du garage sont effacés ensuite par l'interface (stockage, dossier <id>/).
+-- =====================================================================================================
+create or replace function public.crm_admin_revendeur_supprimer(p_id uuid) returns json
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  en public.crm_entreprises;
+  emails text[];
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  select * into en from public.crm_entreprises where id = p_id;
+  if en.id is null then raise exception 'Garage introuvable.'; end if;
+  if en.demo then raise exception 'Le garage de démonstration ne peut pas être supprimé.'; end if;
+  select coalesce(array_agg(email), '{}') into emails from public.crm_membres where entreprise_id = p_id;
+  if exists (select 1 from public.crm_superadmins s where lower(trim(s.email)) = any (emails)) then
+    raise exception 'C''est ton propre garage : il ne peut pas être supprimé.';
+  end if;
+  -- Messagerie du garage.
+  delete from public.crm_conversations where 'g:' || p_id::text in (cle_a, cle_b);
+  delete from public.crm_msg_bloques where cle = 'g:' || p_id::text;
+  -- Accès : identifiants courts puis comptes de connexion (sauf s'ils servent aussi d'apporteur).
+  delete from public.crm_identifiants where email = any (emails);
+  delete from public.crm_membres where entreprise_id = p_id;
+  delete from auth.users u where lower(u.email) = any (emails)
+    and not exists (select 1 from public.crm_apporteurs a where a.email = lower(u.email))
+    and not exists (select 1 from public.crm_superadmins s where lower(trim(s.email)) = lower(u.email));
+  -- Le garage et tout ce qui en dépend (véhicules, vitrine, réseau, demandes, leads, compteur plaque).
+  -- La fiche de prospection, elle, reste (sans lien vers le compte).
+  delete from public.crm_entreprises where id = p_id;
+  return json_build_object('id', p_id, 'nom', en.nom, 'comptes', to_json(emails));
+end $$;
+
+revoke execute on function public.crm_admin_revendeur_supprimer(uuid) from public, anon;
+grant execute on function public.crm_admin_revendeur_supprimer(uuid) to authenticated;
+
+-- Le super-admin peut lister et effacer les fichiers d'un garage (pour sa suppression complète).
+drop policy if exists "Fichiers : super-admin lecture" on storage.objects;
+create policy "Fichiers : super-admin lecture" on storage.objects for select to authenticated
+  using (bucket_id in ('photos', 'documents') and public.crm_est_superadmin());
+drop policy if exists "Fichiers : super-admin suppression" on storage.objects;
+create policy "Fichiers : super-admin suppression" on storage.objects for delete to authenticated
+  using (bucket_id in ('photos', 'documents') and public.crm_est_superadmin());

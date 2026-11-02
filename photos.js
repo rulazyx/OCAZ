@@ -147,13 +147,25 @@ const Photos = (() => {
     $('#flou-appliquer').addEventListener('click', () => appliquerFlou().catch(err => toast(err.message)));
   }
 
+  // Adresses temporaires (1 h) des photos privées, redemandées après 50 minutes.
+  const DUREE = 3600, VALIDE = 50 * 60 * 1000;
+  const lien = p => { const l = liens.get(p); return l && Date.now() - l.t < VALIDE ? l.url : ''; };
   async function signer(chemins) {
-    const manquants = chemins.filter(p => !liens.has(p));
+    const manquants = [...new Set(chemins.filter(p => p && !lien(p)))];
     if (manquants.length && Sync.client && Sync.role) {
-      const { data } = await Sync.client.storage.from(BUCKET).createSignedUrls(manquants, 3600);
-      (data || []).forEach(d => { if (d.signedUrl) liens.set(d.path, d.signedUrl); });
+      const { data } = await Sync.client.storage.from(BUCKET).createSignedUrls(manquants, DUREE);
+      (data || []).forEach(d => { if (d.signedUrl) liens.set(d.path, { url: d.signedUrl, t: Date.now() }); });
     }
-    return chemins.map(p => liens.get(p) || '');
+    return chemins.map(lien);
+  }
+
+  // Remplit les photos d'un carrousel rendu avant d'avoir leurs adresses (cartes du stock, véhicules partenaires).
+  async function hydrater(racine) {
+    const imgs = [...racine.querySelectorAll('img[data-chemin]:not([src])')];
+    if (!imgs.length) return;
+    let urls = [];
+    try { urls = await signer(imgs.map(i => i.dataset.chemin)); } catch (e) { /* hors ligne */ }
+    imgs.forEach((i, k) => { if (urls[k]) i.src = urls[k]; else i.closest('.car-diapo')?.classList.add('vide'); });
   }
 
   // Image recadrée en JPEG 4:3 (documents PDF et photos d'exemple). null si l'image ne peut pas être lue.
@@ -185,11 +197,10 @@ const Photos = (() => {
   async function galerie(el, v) {
     const ph = liste(v);
     if (!ph.length) { el.innerHTML = '<span class="hint">Pas encore de photos. Elles se prennent depuis le téléphone, une fois le véhicule en préparation.</span>'; return; }
-    el.innerHTML = `<div class="ph-grille">${ph.map(() => '<div class="ph"></div>').join('')}</div>`;
-    const urls = await signer(ph);
-    el.querySelectorAll('.ph').forEach((d, i) => {
-      d.innerHTML = urls[i] ? `<a href="${esc(urls[i])}" target="_blank" rel="noopener"><img src="${esc(urls[i])}" alt="Photo ${i + 1}" loading="lazy"></a>` : '<span class="hint">Connecte-toi pour voir</span>';
-    });
+    // Photos qui défilent (doigt ou flèches) ; un appui ouvre le plein écran.
+    const urls = await signer(ph).catch(() => []);
+    if (!urls.some(Boolean)) { el.innerHTML = '<span class="hint">Connecte-toi pour voir les photos.</span>'; return; }
+    el.innerHTML = Visionneuse.carrousel(urls.filter(Boolean), { alt: vehiculeNom(v) + ', photo', zoom: true, classe: 'car-fiche' });
   }
 
   // Écran de prise de vue.
@@ -277,5 +288,5 @@ const Photos = (() => {
     });
   }
 
-  return { estTelephone, deblocable, galerie, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
+  return { estTelephone, deblocable, galerie, hydrater, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
 })();
