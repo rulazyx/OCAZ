@@ -12,6 +12,8 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   Idem pour lister et modifier, avec plaque, VIN, prix d'achat/vente, statut (En stock, Réservé, Vendu…).
   Le VIN remplit gratuitement la marque et l'année. La plaque remplit marque, modèle, version et l'image du modèle
   via la fonction Supabase `plaque` (voir plus bas).
+  Photos (`visionneuse.js`) : elles défilent au doigt sur téléphone et avec les flèches (ou ← →) sur ordinateur, dans les cartes
+  du Stock, des Partenaires et sur la fiche ; sur la fiche, un appui ouvre le plein écran.
 - **Commandes** : relie un client et un véhicule, prix, acompte, statut. Le statut du véhicule suit la commande
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
 
