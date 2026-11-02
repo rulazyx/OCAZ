@@ -294,12 +294,12 @@
   const AJOUTS = [...PROSPECTION_ETAPES, ...VISION_ETAPES];
   const ETAPES_DEPART = [
     ['1. Valider le marché', 'en_cours', 'Sondage Google Forms en ligne, 60 marchands repérés. Analyser les réponses.'],
-    ["2. Créer l'entreprise", 'plus_tard', 'Micro-entreprise Ocaz, après avoir rencontré les premiers pros (SIREN, compte bancaire, assurance RC pro, marque INPI).'],
+    ["2. Créer l'entreprise", 'fait', 'Micro-entreprise créée : SIREN 132 192 550, SIRET 132 192 550 00011. Reste : compte bancaire pro, assurance RC pro, marque INPI.'],
     ["3. Construire l'appli", 'en_cours', 'Appli pro sur ocaz.re : stock, reprises, dépôt-vente, commandes, administratif, réseau, apporteurs, messagerie, admin.'],
     ["3 bis. Vérifier l'appli", 'en_cours', "Tout vérifier onglet par onglet avec chaque identifiant (admin, revendeur, apporteur) : onglet Vérifications du doc Étapes."],
     ['3 ter. Recherche par plaque', 'en_cours', 'Créer le compte immatriculationapi.com et suivre le guide « Activer la recherche par plaque ».'],
     ['4. Domaine et mail', 'fait', 'ocaz.re = appli pro, reseau.ocaz.re = site public, contact@ocaz.re et signature mail prêts.'],
-    ['5. Pages légales du site', 'en_cours', 'Ajouter le SIREN une fois l\'entreprise créée. Faire relire le contrat apporteur par un juriste.'],
+    ['5. Pages légales du site', 'en_cours', 'SIREN et SIRET ajoutés aux mentions légales. Reste : faire relire le contrat apporteur par un juriste.'],
     ['6. Référencement Google', 'en_cours', 'Search Console fait. Suite : fiche Google Business et annuaires locaux.'],
     ["7. Paiement de l'abonnement", 'a_faire', '69,99 €/mois, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
     ...PROSPECTION_ETAPES,
