@@ -1,9 +1,6 @@
 // Recherche par plaque : l'appli appelle la fonction Supabase « plaque » (supabase/functions/plaque),
 // qui interroge le fournisseur avec la clé gardée dans les secrets Supabase. Aucune clé dans l'appli.
 const Plaque = (() => {
-  // Anciennes clés RapidAPI gardées sur l'appareil par la version précédente : plus utilisées.
-  try { localStorage.removeItem('crmzx-plaque'); } catch (e) { /* stockage indisponible */ }
-
   // Compteur du mois, renvoyé par la fonction (par garage).
   let compteur = { utilisees: null, limite: null };
   const usageTexte = () => compteur.utilisees == null ? '' : `${compteur.utilisees}/${compteur.limite} recherches par plaque ce mois-ci pour le garage`;

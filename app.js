@@ -20,14 +20,6 @@ const db = {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (saved) this.data = Object.assign(this.data, saved);
-      (this.data.planning || []).forEach(r => {
-        if (r.type === 'Rappel client') r.type = 'Relance client';
-        if (r.type === 'Livraison') r.type = 'Vente / livraison';
-      });
-      (this.data.commandes || []).forEach(o => {
-        if (o.statut === 'Devis') o.statut = 'Offre';
-        if (o.statut === 'En cours') o.statut = 'Commande';
-      });
     } catch (e) { /* stockage indisponible : on démarre vide */ }
   },
   // `distant` : données reçues de la synchro, à ne pas renvoyer.
@@ -357,7 +349,7 @@ const TABS = {
         <span class="price">${euros(o.prix)}</span></div>`;
     },
     canDelete: () => true,
-    afterSave: (o, avant) => {
+    afterSave: o => {
       // Offre émise : relance client planifiée deux jours après.
       if (o.statut === 'Offre' && !relances(o).length) {
         const d = new Date(); d.setDate(d.getDate() + 2);

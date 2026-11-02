@@ -87,10 +87,6 @@ const Sync = (() => {
     // Une seule connexion pour tous : l'espace s'ouvre selon le compte. Apporteur seul → son espace.
     // Compte garage ET apporteur → l'espace choisi en dernier (accueil ou bouton de bascule).
     apporteur = !!data?.apporteur;
-    if (data?.role && data.apporteur === undefined) {
-      // Base pas encore à jour (ancienne fonction crm_moi) : on demande directement.
-      try { const r = await client.rpc('crm_apporteur_moi'); apporteur = !r.error && !!r.data; } catch (e) { /* réseau pas installé */ }
-    }
     if (apporteur && (!data.role || prefere() === 'apporteur')) { location.replace('apporteur'); return; }
     if (!data || !data.role) { role = null; setStatus('refuse'); return; }
     // L'administrateur arrive sur son interface (il peut passer à son garage avec le bouton ⇄).

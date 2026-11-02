@@ -2,14 +2,14 @@
 
 Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), utilisable sur téléphone et sur PC.
 
-## Version 1
+## Fonctions principales
 
 - **Clients** : plus d'onglet depuis le 27/10/2026 ; un client se crée dans l'offre (bloc « Nouveau client ») et sa fiche s'ouvre
   depuis les leads, les révisions et le Tableau de bord. Le Planning n'a plus d'écran non plus : les relances et rappels
   (`planning` dans les données) servent toujours au Tableau de bord et aux offres.
 - **Véhicules** : parcours Reprise à étudier → validée (En préparation / En stock) ou refusée → Réservé → Vendu.
   Fiche reprise : vendeur, état, cote estimée, frais, prix proposé, avec des liens vers les cotes gratuites (La Centrale, L'argus, Leboncoin).
-  Idem pour lister et modifier, avec plaque, VIN, prix d'achat/vente, statut (En stock, Réservé, Vendu…).
+  Chaque fiche véhicule a plaque, VIN, prix d'achat/vente, statut (En stock, Réservé, Vendu…).
   Le VIN remplit gratuitement la marque et l'année. La plaque remplit marque, modèle, version et l'image du modèle
   via la fonction Supabase `plaque` (voir plus bas).
   Photos (`visionneuse.js`) : elles défilent au doigt sur téléphone et avec les flèches (ou ← →) sur ordinateur, dans les cartes
@@ -62,14 +62,14 @@ pages légales, `rejoindre`, `outils`) est dans le dépôt `SITE-VITRINE-` (ex-`
   transmis par les apporteurs, prise en charge (fiche client, reprise à étudier, relance), vendu ou clos, commission versée,
   facture de l'apporteur. Le garage verse la commission lui-même : rien ne passe par Ocaz.
 - **Apporteur** (`apporteur.html`, gratuit, compte créé par l'administrateur) : contrat signé en ligne à la première connexion,
-  Suivi leads (en cours, clos, terminés), Données (commissions, ventes, leads en souffrance, taux de transformation),
+  Suivi leads (en cours, clos, terminés), Tableau de bord (commissions, ventes, leads en souffrance, taux de transformation),
   Réseau (choisir un véhicule et envoyer un client, avec son accord RGPD et une reprise éventuelle), Paramètres (infos, RIB,
   factures de commission, contrat). Démo : identifiant `apporteur`, mot de passe `test`.
 
 ## Rappels de révision (leads « Révision »)
 
 - 11 mois après une commande livrée (délai réglable dans Paramètres > Révisions), le client apparaît dans l'onglet **Leads > Révisions**
-  (« À appeler », avec « À venir » pour le mois suivant, puis RDV / Faites / Closes) et sur l'accueil (Données). L'onglet Leads est donc
+  (« À appeler », avec « À venir » pour le mois suivant, puis RDV / Faites / Closes) et sur le Tableau de bord. L'onglet Leads est donc
   visible pour tous les revendeurs ; la bascule Réseau / Révisions n'apparaît qu'avec le droit réseau.
 - Prix proposé = coût de la révision + marge du garage, arrondi à 5 €. Le coût est la ligne « Vidange et filtres » de la préparation
   du véhicule vendu (son tarif prépa), sinon le coût réglé dans Paramètres. Le suivi est gardé sur la commande (`revision`).
