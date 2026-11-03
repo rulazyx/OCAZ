@@ -699,5 +699,6 @@ dialog.visionneuse::backdrop { background: #000; }
 .r-kpi.r-kpi-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .r-kpi.r-kpi-2 strong { font-size: 22px; }
 .s-cg { display: grid; gap: 6px; margin: 4px 0 12px; }
-.s-cg > label.button { justify-self: start; font-weight: 600; }
+.s-cg { padding: 12px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.s-cg > label.button { justify-self: start; font-weight: 600; font-size: 15px; border-color: var(--accent); }
 .s-cg > label.button.busy { opacity: .55; pointer-events: none; }
