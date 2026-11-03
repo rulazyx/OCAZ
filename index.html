@@ -344,18 +344,27 @@
     <div class="o-body" id="photos-normal">
       <p id="photos-compteur" class="ph-compteur"></p>
       <div class="ph-options">
+        <label class="check"><input type="checkbox" id="ph-cadrer"><span>Cadrage auto sur le véhicule</span></label>
         <label class="check"><input type="checkbox" id="ph-ameliorer"><span>Retouche auto (lumière et couleurs)</span></label>
         <label class="check"><input type="checkbox" id="ph-logo"><span>Mon logo en bas à droite</span></label>
         <span class="hint" id="ph-logo-hint">Ajoute ton logo dans Paramètres pour l'afficher sur les photos.</span>
       </div>
       <div id="photos-grille" class="ph-grille"></div>
-      <p class="hint">Les photos sont réduites, retouchées puis envoyées tout de suite sur la fiche du véhicule. « Flouter » cache la plaque ou un visage.</p>
+      <p class="hint">Les photos sont cadrées sur le véhicule (format 4:3), réduites, retouchées puis envoyées tout de suite sur la fiche du véhicule. « Cadrer » permet de zoomer ou dézoomer à la main, « Flouter » cache la plaque ou un visage.</p>
     </div>
     <div class="o-body" id="photos-flou" hidden>
       <p class="hint">Trace un cadre avec le doigt (ou la souris) sur la plaque à cacher. Tu peux en tracer plusieurs.</p>
       <canvas id="flou-canvas" class="flou-canvas"></canvas>
       <div class="actions"><button type="button" id="flou-retour">Retour</button><button type="button" id="flou-annuler-zone">Annuler le dernier cadre</button>
         <span class="spacer"></span><button type="button" id="flou-appliquer" class="success">Enregistrer la photo</button></div>
+    </div>
+    <div class="o-body" id="photos-cadre" hidden>
+      <p class="hint">Glisse la photo pour la déplacer, pince (ou molette) pour zoomer ou dézoomer. Les bords vides sont remplis automatiquement.</p>
+      <canvas id="cadre-canvas" class="cadre-canvas" width="800" height="600"></canvas>
+      <label class="cadre-zoom"><span>−</span><input type="range" id="cadre-zoom" step="0.01" aria-label="Zoom"><span>+</span></label>
+      <p class="hint" id="cadre-etat"></p>
+      <div class="actions"><button type="button" id="cadre-retour">Retour</button><button type="button" id="cadre-auto">Sur le véhicule</button><button type="button" id="cadre-entier">Toute la photo</button>
+        <span class="spacer"></span><button type="button" id="cadre-appliquer" class="success">Enregistrer la photo</button></div>
     </div>
     <div class="actions o-actions">
       <label class="button primary ph-btn" id="photos-prendre">📷 Prendre une photo<input id="photos-input" type="file" accept="image/*" capture="environment" hidden></label>
@@ -381,6 +390,7 @@
 <script src="droits.js"></script>
 <script src="fichiers.js"></script>
 <script src="visionneuse.js"></script>
+<script src="cadrage.js"></script>
 <script src="photos.js"></script>
 <script src="offre.js"></script>
 <script src="reprise.js"></script>

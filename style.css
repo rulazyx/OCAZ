@@ -373,14 +373,21 @@ details summary { cursor: pointer; font-weight: 600; color: var(--muted); }
 .membre > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Photos */
-.ph-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.ph-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
 .ph { position: relative; aspect-ratio: 4 / 3; border-radius: 10px; overflow: hidden; background: var(--line); display: grid; place-items: center; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ph-suppr { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: 14px; }
 .ph-compteur { font-size: 15px; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; }
 .ph-compteur.manque { background: color-mix(in srgb, var(--orange) 14%, transparent); }
 .ph-compteur.ok { background: color-mix(in srgb, var(--green) 14%, transparent); }
-.ph-flou { position: absolute; left: 4px; bottom: 4px; padding: 3px 8px; border-radius: 99px; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; }
+.ph-outils { position: absolute; left: 4px; bottom: 4px; display: flex; gap: 4px; }
+.ph-outils button { padding: 3px 8px; border-radius: 99px; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; }
+/* Cadrage (cadrage.js) : aperçu au format 4:3 des photos enregistrées. */
+.cadre-canvas { width: 100%; max-width: calc(62dvh * 4 / 3); aspect-ratio: 4 / 3; margin: 0 auto; border-radius: 12px; background: #000; touch-action: none; cursor: grab; display: block; }
+.cadre-canvas:active { cursor: grabbing; }
+.cadre-zoom { display: flex; align-items: center; gap: 10px; max-width: 420px; width: 100%; margin: 6px auto 0; font-size: 20px; color: var(--muted); }
+.cadre-zoom input { flex: 1; accent-color: var(--accent); }
+#cadre-etat:empty { display: none; }
 .ph-options { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 0 0 12px; }
 .flou-canvas { width: 100%; max-height: 62dvh; object-fit: contain; border-radius: 12px; background: #000; touch-action: none; cursor: crosshair; display: block; }
 .ph-btn.desactive { opacity: .45; pointer-events: none; }
@@ -667,9 +674,10 @@ body:not(.ap) #bottom-tabs [data-tab="donnees"], body:not(.ap) #bottom-tabs [dat
   .carrousel:hover .car-fleche, .car-fleche:focus-visible { opacity: 1; }
 }
 /* Dans une carte du stock : à la place de la vignette. */
-.carrousel.car-carte { margin: -14px -16px 10px; height: 170px; border-radius: var(--radius) var(--radius) 0 0; }
+/* Format 4:3, celui des photos cadrées (cadrage.js) : le véhicule apparaît entier, sans être coupé. */
+.carrousel.car-carte { margin: -14px -16px 10px; aspect-ratio: 4 / 3; border-radius: var(--radius) var(--radius) 0 0; }
 /* Sur la fiche du véhicule : grand format ; un appui ouvre le plein écran. */
-.carrousel.car-fiche { aspect-ratio: 4 / 3; max-height: 420px; width: 100%; border-radius: 12px; }
+.carrousel.car-fiche { aspect-ratio: 4 / 3; max-height: 420px; width: 100%; max-width: 560px; border-radius: 12px; }
 .carrousel.car-fiche .car-diapo img { object-fit: contain; cursor: zoom-in; }
 .car-fiche .car-fleche { opacity: 1; }
 /* Plein écran. */

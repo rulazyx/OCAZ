@@ -22,14 +22,14 @@
   box-shadow: var(--shadow); display: flex; flex-direction: column; transition: transform .15s, box-shadow .15s; }
 .ap-vehicule:hover:not([disabled]) { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
 .ap-vehicule.reserve { opacity: .6; cursor: default; }
-.ap-photo { position: relative; aspect-ratio: 16 / 9; background: var(--bg); display: grid; place-items: center; color: var(--muted); }
+.ap-photo { position: relative; aspect-ratio: 4 / 3; background: var(--bg); display: grid; place-items: center; color: var(--muted); }
 .ap-photo img { width: 100%; height: 100%; object-fit: cover; }
 .ap-photo .badge { position: absolute; top: 8px; left: 8px; }
 .ap-info { padding: 10px 12px 12px; display: grid; gap: 3px; }
 .ap-info .sub { color: var(--muted); font-size: 13px; }
 .ap-prix { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 16px; }
 .ap-choix { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; margin-top: 10px; }
-.ap-choix img { width: 110px; height: 82px; object-fit: cover; border-radius: 8px; }
+.ap-choix img { width: 110px; height: 83px; object-fit: cover; border-radius: 8px; }
 .ap-choix > div { display: grid; gap: 2px; }
 .ap-choix .sub { color: var(--muted); font-size: 13px; }
 .ap-consent { margin-top: 8px; background: color-mix(in srgb, var(--primary) 7%, transparent); }

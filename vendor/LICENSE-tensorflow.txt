@@ -1,0 +1,3 @@
+tf.min.js (TensorFlow.js 4.22.0), coco-ssd.min.js (@tensorflow-models/coco-ssd 2.2.3)
+et vehicules/ (modèle SSDLite MobileNet v2 COCO de tfjs-models, poids réduits en 8 bits pour Ocaz)
+Copyright Google LLC. Licence Apache 2.0 : https://www.apache.org/licenses/LICENSE-2.0
