@@ -15,6 +15,7 @@ const Reprise = (() => {
   let trouve = ''; // véhicule trouvé par la plaque, affiché sous le champ
   let cgPhoto = null; // photo de la carte grise scannée, rangée dans les documents du véhicule à l'enregistrement
   let cgLu = []; // infos lues sur la carte grise, affichées sous le bouton
+  let edition = false; // reprise validée : résumé (plaque, véhicule, cote, prix) sauf après « Modifier »
 
   // Fourchette de reprise : prix de revente estimé à La Réunion, moins les frais, moins la marge visée.
   function calcul(v) {
@@ -60,6 +61,7 @@ const Reprise = (() => {
 
   // Page 1 : infos minimales demandées par les sites de cote (le vendeur n'est pas demandé : c'est le client de l'offre).
   function page1() {
+    edition = true;
     $('#reprise-titre').textContent = etat.id ? 'Modifier la reprise' : 'Nouvelle reprise';
     $('#reprise-body').innerHTML = `
       ${etat.image ? `<div class="vehicule-image"><img src="${esc(etat.image)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
@@ -85,6 +87,7 @@ const Reprise = (() => {
   function page2() {
     const v = etat;
     const c = calcul(v);
+    if (v.statut === 'Reprise validée' && !edition) { resume(c); return; }
     $('#reprise-titre').textContent = 'Fiche reprise' + (v.statut !== 'Reprise à étudier' ? ' · ' + libStatut(v.statut).replace('Reprise ', '') : '');
     $('#reprise-body').innerHTML = `
       <div class="o-choix">${v.image ? `<img src="${esc(v.image)}" alt="" onerror="this.remove()">` : ''}
@@ -125,6 +128,21 @@ const Reprise = (() => {
     boutons(2);
   }
 
+  // Reprise validée, ouverte depuis la liste : l'essentiel seulement.
+  function resume(c) {
+    const v = etat;
+    $('#reprise-titre').textContent = 'Reprise validée';
+    $('#reprise-body').innerHTML = `
+      <div class="o-choix r-resume">${v.image ? `<img src="${esc(v.image)}" alt="" onerror="this.remove()">` : ''}
+        <div><span class="r-plaque">${v.immatriculation ? esc(v.immatriculation) : 'Sans plaque'}</span>
+        <strong>${esc(vehiculeNom(v))}</strong>
+        <span class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite].filter(Boolean).join(' · '))}</span></div></div>
+      <h3 class="section">Cote</h3>
+      <div class="r-kpi r-kpi-2"><div><span>Cote</span><strong>${c.cote ? euros(c.cote) : '—'}</strong></div>
+        <div><span>Prix de reprise</span><strong>${v.prixPropose ? euros(v.prixPropose) : '—'}</strong></div></div>`;
+    boutons(2);
+  }
+
   function fourchetteHtml(c) {
     if (!c.cote) return '<span class="hint">Saisis au moins une cote pour calculer la fourchette.</span>';
     return `<div><span>Fourchette de reprise</span><strong>${euros(c.basse)} – ${euros(c.haute)}</strong></div>
@@ -141,7 +159,7 @@ const Reprise = (() => {
 
   function ouvrir(id, preset = {}) {
     etat = id ? { ...db.get('vehicules', id) } : { statut: 'Reprise à étudier', mode: 'achat', ...preset };
-    extra = {}; trouve = ''; cgPhoto = null; cgLu = [];
+    extra = {}; trouve = ''; cgPhoto = null; cgLu = []; edition = false;
     if (id) page2(); else page1();
     $('#dlg-reprise').showModal();
   }
@@ -307,6 +325,7 @@ const Reprise = (() => {
       setTimeout(() => alerteRecherche(saved), 2800);
       filtreReprise = 'Reprises validées';
       render();
+      edition = false;
       page2(); // la fiche validée propose Modifier, Rentrer en stock ou Annuler
       toast('Reprise validée : rentre-la en stock, ou ajoute-la dans une offre');
     });
@@ -329,5 +348,5 @@ const Reprise = (() => {
     $('#r-btn-fermer').addEventListener('click', fermer);
   }
 
-  return { ouvrir, init, reglages };
+  return { ouvrir, init, reglages, rangerCarteGrise };
 })();
