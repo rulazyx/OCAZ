@@ -694,3 +694,10 @@ dialog.visionneuse::backdrop { background: #000; }
 .s-options .s-n:not(:empty) { background: var(--accent); color: #111; border-radius: 99px; padding: 0 8px; font-size: 12px; font-weight: 700; }
 .s-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px 10px; margin-top: 8px; }
 .s-auto { font-style: normal; font-size: 11px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+.r-resume .r-plaque { justify-self: start; font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: .06em; font-size: 13px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin-bottom: 4px; }
+.r-resume strong { font-size: 18px; }
+.r-kpi.r-kpi-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.r-kpi.r-kpi-2 strong { font-size: 22px; }
+.s-cg { display: grid; gap: 6px; margin: 4px 0 12px; }
+.s-cg > label.button { justify-self: start; font-weight: 600; }
+.s-cg > label.button.busy { opacity: .55; pointer-events: none; }

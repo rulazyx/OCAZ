@@ -49,7 +49,7 @@ const EntreeStock = (() => {
     ['co2', 'CO₂ (g/km)', 'number'], ['portes', 'Portes', 'number'], ['places', 'Places', 'number'],
   ];
 
-  let etat = null, auto = new Set();
+  let etat = null, auto = new Set(), cgInfo = '';
 
   const valeur = k => etat[k] ?? '';
   function champ(k, l, type = 'text') {
@@ -87,6 +87,8 @@ const EntreeStock = (() => {
       </div>
 
       <h3 class="section">Informations</h3>
+      <div class="s-cg"><label class="button" id="s-cg-label">📷 Scanner la carte grise<input id="s-cg-input" type="file" accept="image/*" hidden></label>
+        <span class="hint" id="s-cg-info">${cgInfo ? esc(cgInfo) : 'Remplit les cases vides avec ce qui est lu sur la carte grise (VIN, date de mise en circulation, puissance, cylindrée, places…).'}</span></div>
       <p class="hint">${vides ? `Repris de la reprise. <strong>${vides} info${vides > 1 ? 's' : ''} à compléter</strong> (cadres en jaune).` : 'Repris de la reprise : tout est rempli, vérifie simplement.'}</p>
       <div class="grid">${INFOS_().map(([k, l, t]) => champ(k, l, t)).join('')}</div>
 
@@ -131,7 +133,7 @@ const EntreeStock = (() => {
     if (!etat.prixAchat) etat.prixAchat = etat.prixPropose || '';
     if (!DISPONIBLE.includes(etat.statut)) etat.statut = num(etat.fraisEstimes) > 0 ? 'En préparation' : 'En stock';
     if (!etat.achatPaiement) etat.achatPaiement = '';
-    auto = new Set();
+    auto = new Set(); cgInfo = '';
     if (!Array.isArray(etat.options)) {
       // Première ouverture : options déduites, et l'ancien texte libre gardé dans « Autres ».
       auto = deduites(etat);
@@ -142,6 +144,36 @@ const EntreeStock = (() => {
     }
     afficher();
     $('#dlg-entree').showModal();
+  }
+
+  // Scan de la carte grise : lecture sur l'appareil (gratuite) ; seules les cases vides sont remplies.
+  // S'il reste des cases vides et qu'une plaque est connue, la recherche par plaque complète (souvent déjà en cache).
+  async function scanner(brut) {
+    const label = $('#s-cg-label');
+    label.classList.add('busy');
+    $('#s-cg-info').textContent = 'Lecture de la carte grise… (quelques secondes, plus la première fois)';
+    let r = {}, f = null;
+    try { f = await Scan.reduire(brut); r = await Scan.lire('carteGrise', f); }
+    catch (e) { label.classList.remove('busy'); $('#s-cg-info').textContent = e.message; return; }
+    if (r.immatriculation) r.immatriculation = formatPlaque(r.immatriculation);
+    if (r.vin && !r.marque) { const d = VIN.decode(r.vin); if (d.ok && d.marque) r.marque = d.marque; }
+    const libelles = Object.fromEntries(INFOS_().map(([k, l]) => [k, l]));
+    const remplis = [];
+    const remplir = (src, k) => { if (src[k] && !String(etat[k] ?? '').trim() && libelles[k]) { etat[k] = src[k]; remplis.push(libelles[k]); } };
+    Object.keys(libelles).forEach(k => remplir(r, k));
+    if (r.typeVariante && !etat.typeVariante) etat.typeVariante = r.typeVariante;
+    const vides = INFOS_().filter(([k]) => !String(etat[k] ?? '').trim());
+    if (vides.length && etat.immatriculation && window.Sync?.user) {
+      try { const p = await Plaque.rechercher(etat.immatriculation); Object.keys(libelles).forEach(k => remplir(p, k)); if (p.image && !etat.image) etat.image = p.image; }
+      catch (e) { /* la plaque est facultative ici */ }
+    }
+    // Nouvelles options déduites (boîte, énergie, places…).
+    deduites(etat).forEach(o => { if (!etat.options.includes(o)) { etat.options.push(o); auto.add(o); } });
+    if (f && Object.keys(r).length) { enregistrer(false); Reprise.rangerCarteGrise(etat.id, f); }
+    cgInfo = remplis.length ? `Rempli depuis la carte grise : ${remplis.join(', ')}. Vérifie, la lecture peut se tromper.`
+      : Object.keys(r).length ? 'Carte grise lue : les cases étaient déjà remplies, rien n\'a été changé.'
+      : 'Rien de lisible sur la photo. Reprends-la à plat, bien éclairée, sans reflet.';
+    afficher();
   }
 
   function enregistrer(entrer) {
@@ -178,7 +210,10 @@ const EntreeStock = (() => {
       }
     };
     body.addEventListener('input', lire);
-    body.addEventListener('change', lire);
+    body.addEventListener('change', e => {
+      if (e.target.id === 's-cg-input') { const f = e.target.files[0]; e.target.value = ''; if (f) scanner(f); return; }
+      lire(e);
+    });
     body.addEventListener('click', e => {
       if (e.target.id !== 's-btn-photos') return;
       enregistrer(false);
