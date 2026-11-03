@@ -222,7 +222,9 @@ const Reprise = (() => {
     }
     const ext = extra; page1(); extra = ext;
     // La plaque lue complète le reste (modèle exact, version, boîte, image) avec la recherche habituelle.
-    if (etat.immatriculation && Sync.user) $('#r-btn-plaque')?.click();
+    // Si la recherche payante est coupée par l'admin, rien ne s'affiche : le scan suffit.
+    const btnPlaque = $('#r-btn-plaque');
+    if (etat.immatriculation && Sync.user && btnPlaque) { btnPlaque.dataset.auto = '1'; btnPlaque.click(); }
     else toast('Carte grise lue : vérifie les infos');
   }
 
@@ -259,6 +261,8 @@ const Reprise = (() => {
       }
       if (e.target.id === 'r-btn-plaque') {
         const btn = e.target;
+        const auto = btn.dataset.auto === '1';
+        delete btn.dataset.auto;
         const plate = $('#r-immatriculation');
         plate.value = formatPlaque(plate.value);
         etat.immatriculation = plate.value;
@@ -277,7 +281,7 @@ const Reprise = (() => {
           const usage = Plaque.usageTexte();
           toast('Véhicule trouvé' + (usage ? ` (${usage})` : ''));
         } catch (err) {
-          toast(err.message);
+          if (!(auto && err.coupee)) toast(err.message);
         } finally {
           btn.disabled = false; btn.textContent = 'Rechercher';
         }

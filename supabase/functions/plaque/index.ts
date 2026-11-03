@@ -5,6 +5,10 @@
 //   PLAQUE_UTILISATEUR   nom d'utilisateur immatriculationapi.com (fournisseur conseillé)
 //   ou PLAQUE_RAPIDAPI_CLE (+ PLAQUE_RAPIDAPI_HOST) pour une API plaque vendue sur RapidAPI
 //   PLAQUE_LIMITE_MOIS   recherches payantes par garage et par mois (30 par défaut)
+//
+// Interrupteur (2026-11-03) : réglage admin « plaque » dans crm_admin_reglages = { actif, plafond_mois }.
+// Sans ce réglage, ou actif = false, aucune recherche payante ne part (le cache gratuit reste servi).
+// plafond_mois = nombre total de recherches payantes par mois, tous garages confondus (50 par défaut).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CORS = {
@@ -123,6 +127,19 @@ Deno.serve(async req => {
 
     const fournisseur = env('PLAQUE_UTILISATEUR') ? immatriculationApi : env('PLAQUE_RAPIDAPI_CLE') ? rapidApi : null;
     if (!fournisseur) return erreur("Recherche par plaque pas encore activée : il manque la clé du fournisseur dans Supabase.");
+
+    // Interrupteur et plafond global, réglés par l'administrateur (onglet Tableau de bord).
+    const { data: reglage } = await admin.from('crm_admin_reglages').select('valeur').eq('cle', 'plaque').maybeSingle();
+    const cfg = (reglage?.valeur || {}) as { actif?: boolean; plafond_mois?: number };
+    if (cfg.actif !== true) {
+      return reponse({ erreur: 'Recherche par plaque coupée (payante) : scanne la carte grise ou saisis les champs à la main.', coupee: true });
+    }
+    const plafond = Math.max(0, Number(cfg.plafond_mois ?? 50) || 0);
+    const { data: lignes } = await admin.from('crm_plaque_compteur').select('nb').eq('mois', new Date().toISOString().slice(0, 7));
+    const total = (lignes || []).reduce((t: number, l: { nb: number }) => t + (l.nb || 0), 0);
+    if (total >= plafond) {
+      return reponse({ erreur: `Plafond de ${plafond} recherches par plaque atteint ce mois-ci : saisis les champs à la main.`, coupee: true });
+    }
 
     const limite = parseInt(env('PLAQUE_LIMITE_MOIS') || '30', 10) || 30;
     const { data: n, error: errRes } = await admin.rpc('crm_plaque_reserver', { p_entreprise: membre.entreprise_id, p_limite: limite });

@@ -33,7 +33,7 @@ const Plaque = (() => {
     } catch (e) {
       throw new Error("Le service de plaque ne répond pas. Si c'est la première fois, la fonction « plaque » n'est peut-être pas encore installée dans Supabase.");
     }
-    if (json.erreur) throw new Error(json.erreur);
+    if (json.erreur) { const e = new Error(json.erreur); e.coupee = !!json.coupee; throw e; }
     if (json.utilisees != null) compteur = { utilisees: json.utilisees, limite: json.limite };
     const d = json.data || {};
     // Le service renvoie plus de 80 champs dont les noms varient : on cherche par mot-clé.

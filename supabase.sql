@@ -1435,6 +1435,17 @@ end $$;
 revoke execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) from public, anon;
 grant execute on function public.crm_admin_reglage_lire(text), public.crm_admin_reglage_ecrire(text, jsonb) to authenticated;
 
+-- Recherche par plaque payante (2026-11-03) : l'admin la coupe ou l'active (réglage « plaque » = { actif, plafond_mois }),
+-- la fonction « plaque » le vérifie avant chaque appel payant. Ici : nombre de recherches payées ce mois-ci, tous garages.
+create or replace function public.crm_admin_plaque_mois() returns integer
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  return coalesce((select sum(nb) from public.crm_plaque_compteur where mois = to_char(now(), 'YYYY-MM')), 0);
+end $$;
+revoke execute on function public.crm_admin_plaque_mois() from public, anon;
+grant execute on function public.crm_admin_plaque_mois() to authenticated;
+
 -- Calendrier de l'administrateur (2026-10-28) : ses rendez-vous et activités de la semaine, heure par heure.
 -- Les types d'activité (nom + couleur) sont dans crm_admin_reglages, clé 'agenda_types'.
 create table if not exists public.crm_admin_agenda (
