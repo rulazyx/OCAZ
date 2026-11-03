@@ -625,6 +625,34 @@ function lookupHtml(row) {
   </div>`;
 }
 
+// Fiche d'un véhicule du stock : la grande photo et ses miniatures, le prix et l'essentiel, puis les rubriques
+// du formulaire repliées (un appui les déplie). Les champs restent les mêmes : Enregistrer marche comme avant.
+const estFicheStock = row => !!row?.id && !REPRISE.includes(row.statut) && row.statut !== 'Dépôt en cours';
+function ficheVehiculeHtml(row, tab) {
+  const groupes = [{ titre: 'Infos du véhicule', html: [] }];
+  for (const f of tab.fields) {
+    if (f.type === 'photos') continue;
+    if (f.type === 'section') { groupes.push({ titre: f.l, html: [] }); continue; }
+    if (f.k === '_papiers') groupes.push({ titre: 'Documents', html: [] });
+    if (f.k === 'notes') groupes.push({ titre: 'Notes', html: [] });
+    groupes[groupes.length - 1].html.push(fieldHtml(f, row));
+  }
+  const jours = row.dateEntree ? Math.max(0, Math.round((Date.now() - new Date(row.dateEntree)) / 864e5)) : null;
+  const marge = Depot.est(row) ? (row.prixVente ? Depot.commission(row) - Prepa.frais(row) : null)
+    : row.prixVente && row.prixAchat ? num(row.prixVente) - num(row.prixAchat) - Prepa.frais(row) : null;
+  const infos = [row.annee, km(row.kilometrage), row.carburant, row.boite, row.puissanceCh ? row.puissanceCh + ' ch' : '', row.couleur, row.places ? row.places + ' places' : ''].filter(Boolean);
+  return `<div class="vf-photos" id="vf-photos"></div>
+    <div class="vf-tete">
+      <div class="vf-prix">${euros(row.prixVente) || '<span class="hint">Prix de vente à définir</span>'}</div>
+      <span class="badge ${STATUT_VEHICULE[row.statut] || 'b-grey'}">${esc(libStatut(row.statut))}</span>
+      ${row.immatriculation ? `<span class="plate">${esc(row.immatriculation)}</span>` : ''}
+    </div>
+    ${infos.length ? `<div class="vf-infos">${infos.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    ${jours !== null || marge !== null ? `<div class="vf-chiffres">${jours !== null ? `<span>En stock depuis <strong>${jours} j</strong></span>` : ''}${marge !== null ? `<span>Marge estimée <strong>${euros(marge)}</strong></span>` : ''}</div>` : ''}
+    <div class="vf-sections">${groupes.filter(g => g.html.join('').trim()).map(g =>
+      `<details class="vf-section"><summary>${esc(g.titre)}</summary><div class="grid">${g.html.join('')}</div></details>`).join('')}</div>`;
+}
+
 function openForm(id, preset = {}) {
   const tab = TABS[current];
   const row = id ? db.get(current, id) : { ...preset };
@@ -632,7 +660,9 @@ function openForm(id, preset = {}) {
   $('#form-title').textContent = id
     ? (current === 'commandes' ? (row.statut === 'Offre' ? 'Offre ' : 'Commande ') + row.numero : current === 'vehicules' ? vehiculeNom(row) : clientNom(row))
     : (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'stock' ? 'Nouveau véhicule' : tab.titreNouveau);
-  $('#form-body').innerHTML = `<div class="grid">${tab.fields.map(f => fieldHtml(f, row)).join('')}</div>`;
+  const fiche = current === 'vehicules' && estFicheStock(row);
+  $('#dlg').classList.toggle('fiche-vehicule', fiche);
+  $('#form-body').innerHTML = fiche ? ficheVehiculeHtml(row, tab) : `<div class="grid">${tab.fields.map(f => fieldHtml(f, row)).join('')}</div>`;
   $('#btn-delete').style.display = id ? '' : 'none';
   // Véhicule ajouté directement au stock (sans l'option Reprise) : pas de boutons de reprise.
   const ajoutStock = current === 'vehicules' && !id && onglet === 'stock';
@@ -665,6 +695,7 @@ function openForm(id, preset = {}) {
 function wireVehicule() {
   const galerie = $('#galerie-photos');
   if (galerie) Photos.galerie(galerie, db.get('vehicules', editing.id));
+  if ($('#vf-photos')) Photos.vitrine($('#vf-photos'), db.get('vehicules', editing.id));
   $('#btn-photos')?.addEventListener('click', () => Photos.ouvrir(editing.id));
   $('#btn-docs-depot')?.addEventListener('click', () => { $('#dlg').close(); DepotVente.ouvrir(editing.id, 4); });
   $('#btn-prepa')?.addEventListener('click', () => Prepa.ouvrir(editing.id));
@@ -895,6 +926,8 @@ $('#btn-delete').addEventListener('click', () => {
 });
 
 $('#btn-cancel').addEventListener('click', () => $('#dlg').close());
+// Champ obligatoire dans une rubrique repliée de la fiche : on la déplie pour le montrer.
+$('#form').addEventListener('invalid', e => { const d = e.target.closest('details'); if (d) d.open = true; }, true);
 $('#dlg').addEventListener('close', () => { apresEnregistrement = null; ficheEnCours = null; imageEnCours = null; });
 
 // ---------- Sauvegarde ----------
@@ -1224,6 +1257,7 @@ window.addEventListener('resize', () => { clearTimeout(redim); if (onglet === 'd
 $('#dlg-photos').addEventListener('close', () => {
   const g = $('#galerie-photos');
   if (g && $('#dlg').open) Photos.galerie(g, db.get('vehicules', editing.id));
+  if ($('#vf-photos') && $('#dlg').open) Photos.vitrine($('#vf-photos'), db.get('vehicules', editing.id));
 });
 // Écran de lancement : court (environ 1 s), puis fondu vers l'appli.
 // Il reste dans la page (caché) pour servir de transition à la connexion.
