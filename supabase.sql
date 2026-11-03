@@ -214,6 +214,10 @@ begin
       'droits', jsonb_build_object('reseau', true, 'depot', true, 'achat', true),
       'reseau', jsonb_build_object('commissionType', 'fixe', 'commissionValeur', 300, 'commissionMin', 0))
     where demo and config = '{}'::jsonb;
+  -- Offre de base (réseau + leads) et options cochées par l'admin (config.modules) : la démo a toutes les options.
+  update public.crm_entreprises set config = config || jsonb_build_object('modules', jsonb_build_object(
+      'donnees', true, 'commandes', true, 'reprises', true, 'depot', true, 'administratif', true))
+    where demo and not (config ? 'modules');
 end $$;
 
 alter table public.crm_entreprises enable row level security;
@@ -755,7 +759,7 @@ revoke execute on function public.crm_plaque_reserver(uuid, integer), public.crm
 
 -- =====================================================================================================
 -- Comptes créés par l'administrateur (2026-10-27) : interface admin.html réservée au super-admin.
--- Revendeurs : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente) et packs livraison posés par l'admin.
+-- Revendeurs : infos légales, offre de base (réseau Ocaz) et options (config.modules), packs livraison posés par l'admin.
 -- Apporteurs : créés par l'admin avec le mot de passe de départ 12345678, ils signent leur contrat dans l'appli.
 -- =====================================================================================================
 

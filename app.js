@@ -431,7 +431,7 @@ function render() {
   if (n) Photos.hydrater($('#list'));
 }
 
-const sigFiltres = () => onglet + vueStock + vueDepot + Droits.achat() + JSON.stringify(filtresStock) + filtreReprise + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
+const sigFiltres = () => onglet + vueStock + vueDepot + Droits.module('reprises') + JSON.stringify(filtresStock) + filtreReprise + vueCommande + db.all('commandes').map(o => o.statut).join() + db.all('vehicules').map(v => v.statut).join()
   + db.all('vehicules').map(v => v.statut + v.couleur).join();
 
 // Sous-onglets et filtres de l'onglet Véhicules (reconstruits seulement quand nécessaire, pour garder le focus).
@@ -439,8 +439,9 @@ function renderFiltres() {
   const box = $('#filters');
   const add = $('#btn-add');
   add.style.display = onglet === 'stock' ? 'none' : '';
-  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'depot' ? 'Nouveau dépôt vente' : onglet === 'commandes' ? 'Nouvelle offre' : 'Ajouter') + '</span>';
-  add.style.display = onglet === 'stock' || (onglet === 'commandes' && vueCommande !== 'Offres') ? 'none' : '';
+  add.innerHTML = icon('plus', 18) + '<span>' + (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'depot' ? 'Nouveau dépôt vente' : onglet === 'commandes' ? 'Nouvelle offre' : onglet === 'stock' ? 'Ajouter un véhicule' : 'Ajouter') + '</span>';
+  // Stock : sans l'option Reprise, les véhicules s'ajoutent directement ici (avec l'option, ils entrent par une reprise validée).
+  add.style.display = (onglet === 'stock' && (Droits.module('reprises') || vueStock === 'partenaires')) || (onglet === 'commandes' && vueCommande !== 'Offres') ? 'none' : '';
   if (!ONGLETS[onglet].table) add.style.display = 'none';
   if (!['stock', 'reprises', 'depot', 'commandes'].includes(onglet)) { box.innerHTML = ''; box.dataset.vue = ''; return; }
   const all = db.all('vehicules');
@@ -493,7 +494,7 @@ let rechercheOuverte = false;
 const SANS_TELEPHONE = ['donnees', 'commandes'];
 const telephone = () => matchMedia('(max-width: 899px)').matches;
 function ongletAccueil() {
-  if (!telephone()) return 'donnees';
+  if (!telephone()) return Droits.visible('donnees') ? 'donnees' : 'stock';
   const bas = [...document.querySelectorAll('#bottom-tabs [data-tab]')].filter(x => !x.hidden && !SANS_TELEPHONE.includes(x.dataset.tab));
   return (bas.find(x => x.dataset.tab === 'stock') || bas[0])?.dataset.tab || 'donnees';
 }
@@ -630,10 +631,13 @@ function openForm(id, preset = {}) {
   editing = { table: current, id };
   $('#form-title').textContent = id
     ? (current === 'commandes' ? (row.statut === 'Offre' ? 'Offre ' : 'Commande ') + row.numero : current === 'vehicules' ? vehiculeNom(row) : clientNom(row))
-    : (onglet === 'reprises' ? 'Nouvelle reprise' : tab.titreNouveau);
+    : (onglet === 'reprises' ? 'Nouvelle reprise' : onglet === 'stock' ? 'Nouveau véhicule' : tab.titreNouveau);
   $('#form-body').innerHTML = `<div class="grid">${tab.fields.map(f => fieldHtml(f, row)).join('')}</div>`;
   $('#btn-delete').style.display = id ? '' : 'none';
-  $('#form-extra').innerHTML = current === 'vehicules' && (!id || row.statut === 'Reprise à étudier')
+  // Véhicule ajouté directement au stock (sans l'option Reprise) : pas de boutons de reprise.
+  const ajoutStock = current === 'vehicules' && !id && onglet === 'stock';
+  $('#form-extra').innerHTML = ajoutStock ? ''
+    : current === 'vehicules' && (!id || row.statut === 'Reprise à étudier')
     ? `<button type="button" id="btn-refuser" class="danger">Refuser la reprise</button>
        <button type="button" id="btn-valider" class="success">Valider → entrer en stock</button>`
     : current === 'vehicules' && id && row.statut === 'En préparation'
@@ -649,6 +653,9 @@ function openForm(id, preset = {}) {
   // Sur le téléphone, la prise de photos se débloque dès que le véhicule est en préparation.
   if (current === 'vehicules' && id && Photos.deblocable(row) && Photos.estTelephone())
     $('#form-extra').insertAdjacentHTML('afterbegin', '<button type="button" id="btn-photos" class="primary">📷 Prendre les photos</button>');
+  // Sans l'option Commandes : la vente se déclare ici (client + prix), elle fera le lead révision.
+  if (current === 'vehicules' && id && Vente.declarable(row))
+    $('#form-extra').insertAdjacentHTML('beforeend', '<button type="button" id="btn-vendu" class="success">✓ Déclarer la vente</button>');
   if (current === 'vehicules') wireVehicule();
   if (current === 'commandes') wireCommande();
   if (current === 'clients') wireClient();
@@ -661,6 +668,7 @@ function wireVehicule() {
   $('#btn-photos')?.addEventListener('click', () => Photos.ouvrir(editing.id));
   $('#btn-docs-depot')?.addEventListener('click', () => { $('#dlg').close(); DepotVente.ouvrir(editing.id, 4); });
   $('#btn-prepa')?.addEventListener('click', () => Prepa.ouvrir(editing.id));
+  $('#btn-vendu')?.addEventListener('click', () => { const id = editing.id; $('#dlg').close(); Vente.ouvrir(id); });
   $('#btn-pret')?.addEventListener('click', () => {
     $('#f-statut').value = 'En stock';
     if (!$('#f-dateEntree').value) $('#f-dateEntree').value = today();
@@ -903,8 +911,10 @@ function remplirParametres() {
 }
 $('#btn-menu').addEventListener('click', () => switchTab('parametres'));
 // Logo OCAZ : retour au Tableau de bord (accessible aussi sur téléphone où l'onglet est masqué).
-$('.brand').addEventListener('click', () => switchTab('donnees'));
-$('.brand').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab('donnees'); } });
+// Le logo ouvre le Tableau de bord (option), sinon l'onglet d'accueil.
+const ongletLogo = () => (Droits.visible('donnees') ? 'donnees' : ongletAccueil());
+$('.brand').addEventListener('click', () => switchTab(ongletLogo()));
+$('.brand').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab(ongletLogo()); } });
 
 // ---------- Comptes et synchronisation ----------
 const SYNC_TEXTE = { off: 'Non connecté', connexion: 'Connexion…', ok: 'Synchronisé', envoi: 'Envoi…', erreur: 'Erreur de synchro', refuse: 'Accès refusé', 'nouveau-mdp': 'Nouveau mot de passe' };
@@ -1139,7 +1149,8 @@ $('#filters').addEventListener('input', e => {
   $('#filters').dataset.vue = sigFiltres();
   render();
 });
-$('#btn-add').addEventListener('click', () => (onglet === 'commandes' ? Offre.ouvrir() : onglet === 'reprises' ? Reprise.ouvrir() : onglet === 'depot' ? DepotVente.ouvrir() : openForm(null)));
+$('#btn-add').addEventListener('click', () => (onglet === 'commandes' ? Offre.ouvrir() : onglet === 'reprises' ? Reprise.ouvrir() : onglet === 'depot' ? DepotVente.ouvrir()
+  : onglet === 'stock' ? openForm(null, { statut: 'En stock', dateEntree: today() }) : openForm(null)));
 $('#list').addEventListener('click', e => {
   if (e.target.closest('[data-stop]')) return;
   if (Reseau.clic(e)) return;
@@ -1202,6 +1213,7 @@ Partenaires.init();
 EnLigne.init();
 Reseau.init();
 Revision.init();
+Vente.init();
 Import.init();
 Administratif.init();
 let redim = null;

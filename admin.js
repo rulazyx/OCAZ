@@ -1,8 +1,8 @@
 // Interface de l'administrateur d'Ocaz (super-admin seulement), pensée pour faire grandir le réseau jusqu'à une centaine de garages :
 // Tableau de bord (activité de chaque garage), Prospection (garages à signer), Calendrier (calendrier.js), Partenaires (revendeurs et apporteurs),
 // Abonnements (revenu mensuel, essais, impayés), Leads réseau (tous les leads) et Annonces (bandeau chez les partenaires).
-// L'administrateur est le seul à créer les comptes : infos légales, droits (réseau Ocaz, dépôt-vente, achat-revente)
-// et packs livraison de chaque revendeur ; fiche complète de chaque apporteur. Mot de passe de départ : 12345678.
+// L'administrateur est le seul à créer les comptes : infos légales, offre de base (réseau Ocaz + leads) et options
+// ouvertes (onglets cochés au cas par cas), packs livraison de chaque revendeur ; fiche complète de chaque apporteur. Mot de passe de départ : 12345678.
 (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -13,10 +13,18 @@
 
   const INFOS = [['nom', "Nom de l'entreprise *", 'full'], ['siret', 'SIRET'], ['tva', 'N° TVA intracom.'], ['adresse', 'Adresse', 'full'],
     ['codePostal', 'Code postal'], ['ville', 'Ville'], ['telephone', 'Téléphone', '', 'tel'], ['email', 'Email affiché sur les documents', '', 'email'], ['site', 'Site web', 'full']];
-  const DROITS = [['reseau', 'Rejoindre le réseau Ocaz', 'Ses véhicules sont partagés avec les apporteurs et sur le site du réseau ; il reçoit des leads.'],
-    ['depot', 'Dépôt-vente', 'Onglet « Dépôt vente ».'], ['achat', 'Achat-revente', 'Onglet « Reprise » et stock de véhicules achetés.']];
+  // Offre de base : le réseau Ocaz (stock partagé avec les autres garages et les apporteurs, leads du réseau) et les leads révision.
+  // Options : onglets masqués d'origine, cochés ici garage par garage (config.modules), prix étudié au cas par cas.
+  const MODULES = [['donnees', 'Tableau de bord', "Chiffre d'affaires, marges, rotation du stock."],
+    ['commandes', 'Commandes', 'Offres, bons de commande, factures. Sans elle, la vente se déclare depuis la fiche du véhicule.'],
+    ['reprises', 'Reprise', 'Reprises de véhicules (cote, frais, validation). Sans elle, les véhicules s\'ajoutent directement au Stock.'],
+    ['depot', 'Dépôt vente', 'Mandats de dépôt-vente, documents du déposant, reversement.'],
+    ['administratif', 'Administratif', 'Livre de police, cessions SIV, contrôles techniques, papiers à faire.']];
   // Abonnement revendeur : suivi à la main en attendant Stripe. Premier mois offert, sans engagement.
-  const PRIX = 69.99;
+  // PRIX = l'offre de base ; un garage avec des options peut avoir son propre montant (config.abonnement.prix).
+  const PRIX = 19.99;
+  const prixDe = g => Number(g?.config?.abonnement?.prix) || PRIX;
+  const revenu = statut => revendeurs.filter(g => !g.demo && !g.admin && g.config?.abonnement?.statut === statut).reduce((t, g) => t + prixDe(g), 0);
   const ABO = { essai: ['Essai gratuit', 'b-orange'], actif: ['Abonné', 'b-green'], impaye: ['Impayé', 'b-red'], resilie: ['Résilié', 'b-grey'], offert: ['Offert', 'b-purple'] };
   const auj = () => new Date().toISOString().slice(0, 10);
   const finEssai = debut => { const d = new Date(debut + 'T12:00:00'); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); };
@@ -114,16 +122,17 @@
   }
 
   // ---------- Onglet Partenaires ----------
-  const droitsDe = c => c?.droits || { reseau: false, depot: true, achat: true };
+  const reseauDe = c => c?.droits?.reseau !== false;
   function carteRevendeur(g) {
-    const c = g.config || {}, d = droitsDe(c), i = c.infos || {};
+    const c = g.config || {}, m = c.modules || {}, i = c.infos || {};
     const comptes = g.comptes || [];
     return `<button type="button" class="card" data-rev="${esc(g.id)}">
       <div class="top"><span class="title">${esc(g.nom)}</span>
-        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${c.droits ? '' : '<span class="badge b-purple">Droits à régler</span>'}${badgeAbo(g)}</span></div>
+        <span class="c-badges">${g.demo ? '<span class="badge b-orange">Démo</span>' : ''}${g.admin ? '<span class="badge b-grey">Ton garage</span>' : ''}${badgeAbo(g)}</span></div>
       <div class="sub">${esc([i.ville, i.telephone, i.siret && 'SIRET ' + i.siret].filter(Boolean).join(' · ') || 'Infos à compléter')}</div>
       <div class="sub">${esc(comptes.map(x => x.email).join(', ') || 'Aucun compte')}${comptes.some(x => x.doit_changer_mdp) ? ' · mot de passe de départ' : ''}</div>
-      <div class="adm-droits">${DROITS.map(([k, l]) => `<span class="badge ${d[k] ? 'b-green' : 'b-grey off'}">${l.replace('Rejoindre le réseau Ocaz', 'Réseau Ocaz')}</span>`).join('')}</div>
+      <div class="adm-droits"><span class="badge ${reseauDe(c) ? 'b-green' : 'b-grey off'}">Réseau Ocaz</span><span class="badge b-green">Leads révision</span>
+        ${MODULES.filter(([k]) => m[k]).map(([, l]) => `<span class="badge b-purple">${l}</span>`).join('')}</div>
     </button>`;
   }
   function badgeAbo(g) {
@@ -203,12 +212,12 @@
     const liste = tous.filter(g => filtreAbo === 'tous' || statutDe(g) === filtreAbo)
       .filter(g => !q || norm(g.nom).includes(norm(q)));
     $('#vue').innerHTML = `<div class="ap-page">
-      <div class="adm-tete"><h2>Abonnements</h2><span class="hint">${eur(PRIX)} par mois · premier mois offert · sans engagement</span></div>
+      <div class="adm-tete"><h2>Abonnements</h2><span class="hint">Offre de base ${eur(PRIX)} par mois · premier mois offert · sans engagement</span></div>
       <div class="kpis">
-        <div class="kpi"><span class="kpi-l">Revenu mensuel</span><span class="kpi-v">${eur(actifs * PRIX)}</span><span class="kpi-s">${actifs} abonné(s) qui paient</span></div>
-        <div class="kpi"><span class="kpi-l">En essai gratuit</span><span class="kpi-v">${essais}</span><span class="kpi-s">${essais ? '+' + eur(essais * PRIX) + " s'ils restent" : 'Aucun en ce moment'}</span></div>
-        <div class="kpi${impayes ? ' negatif' : ''}"><span class="kpi-l">Impayés</span><span class="kpi-v">${impayes}</span><span class="kpi-s">${impayes ? eur(impayes * PRIX) + ' en attente' : 'Tout est à jour'}</span></div>
-        <div class="kpi"><span class="kpi-l">Revenu à ${CAP} garages</span><span class="kpi-v">${eur(CAP * PRIX)}</span><span class="kpi-s">par mois, ${eur(CAP * PRIX * 12)} par an</span></div>
+        <div class="kpi"><span class="kpi-l">Revenu mensuel</span><span class="kpi-v">${eur(revenu('actif'))}</span><span class="kpi-s">${actifs} abonné(s) qui paient</span></div>
+        <div class="kpi"><span class="kpi-l">En essai gratuit</span><span class="kpi-v">${essais}</span><span class="kpi-s">${essais ? '+' + eur(revenu('essai')) + " s'ils restent" : 'Aucun en ce moment'}</span></div>
+        <div class="kpi${impayes ? ' negatif' : ''}"><span class="kpi-l">Impayés</span><span class="kpi-v">${impayes}</span><span class="kpi-s">${impayes ? eur(revenu('impaye')) + ' en attente' : 'Tout est à jour'}</span></div>
+        <div class="kpi"><span class="kpi-l">Revenu à ${CAP} garages</span><span class="kpi-v">${eur(CAP * PRIX)}</span><span class="kpi-s">par mois à l'offre de base, ${eur(CAP * PRIX * 12)} par an</span></div>
       </div>
       <div class="adm-bloc adm-objectifs">
         <div><span>Garages partenaires : <b>${partenaires}</b> <small class="hint">(abonnés, essais, impayés et offerts)</small></span>${paliers(partenaires)}</div>
@@ -260,7 +269,7 @@
       <div class="adm-tete"><h2>Tableau de bord</h2><button type="button" id="btn-actualiser">Actualiser</button></div>
       <div class="kpis">
         ${kpi('Garages partenaires', partenaires.length, `${actifs} abonné(s) · prochain palier ${palierSuivant(partenaires.length)[0]}`)}
-        ${kpi('Revenu mensuel', eur(actifs * PRIX), `${eur(CAP * PRIX)} à ${CAP} garages`)}
+        ${kpi('Revenu mensuel', eur(revenu('actif')), `${eur(CAP * PRIX)} à ${CAP} garages (offre de base)`)}
         ${kpi('Leads (30 jours)', tableau.leads_30j, `${tableau.ventes_reseau_30j} vente(s) grâce au réseau`)}
         ${kpi('Apporteurs actifs', tableau.apporteurs, 'qui envoient des clients')}
       </div>
@@ -307,7 +316,7 @@
   // Préparer la prospection (28/10) : avant d'aller voir les 5 premiers garages testeurs.
   const PROSPECTION_ETAPES = [
     ['8.1 Préparer une démo fiable', 'a_faire', 'Compte revendeur/test rempli avec photos, testé en 4G, et une capture vidéo de secours de 2 minutes.', 'pr1'],
-    ["8.2 Rédiger l'offre garage testeur", 'a_faire', 'Une demi-page à laisser : 2 mois gratuits, un point par semaine, puis 69,99 €/mois.', 'pr2'],
+    ["8.2 Rédiger l'offre garage testeur", 'a_faire', 'Une demi-page à laisser : 2 mois gratuits, un point par semaine, puis 19,99 €/mois.', 'pr2'],
     ['8.3 Répéter la démo', 'a_faire', 'Le parcours de démo en 5 minutes et les réponses aux objections.', 'pr3'],
     ['8.4 Préparer les comptes la veille', 'a_faire', "Compte créé dans l'admin et stock Leboncoin importé avant la visite.", 'pr4'],
     ['8.5 Organiser les tournées par zone', 'a_faire', '3 ou 4 garages par demi-journée, de 9 h 30 à 11 h ou de 14 h à 15 h 30.', 'pr5'],
@@ -332,7 +341,7 @@
     ['4. Domaine et mail', 'fait', 'ocaz.re = appli pro, reseau.ocaz.re = site public, contact@ocaz.re et signature mail prêts.'],
     ['5. Pages légales du site', 'en_cours', 'SIREN et SIRET ajoutés aux mentions légales. Reste : faire relire le contrat apporteur par un juriste.'],
     ['6. Référencement Google', 'en_cours', 'Search Console fait. Suite : fiche Google Business et annuaires locaux.'],
-    ["7. Paiement de l'abonnement", 'a_faire', '69,99 €/mois, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
+    ["7. Paiement de l'abonnement", 'a_faire', '19,99 €/mois l\'offre de base (réseau + leads), options au cas par cas, premier mois offert, sans engagement. Brancher Stripe une fois le compte pro ouvert.'],
     ...PROSPECTION_ETAPES,
     ['8. Phase test : 5 garages testeurs', 'a_faire', "Démarcher les 60 marchands (onglet Prospection), d'abord ceux qui ont répondu au sondage, en commençant par GT Auto. Puis viser 30."],
     ['9. 30 garages partenaires', 'a_faire', "Objectif avril 2027, environ 2 100 €/mois."],
@@ -720,10 +729,10 @@
   function ouvrirRevendeur(id, base) {
     const g = revendeurs.find(x => x.id === id);
     const c = g?.config || (base ? { infos: { nom: base.nom, ville: base.ville, telephone: base.telephone, email: base.email } } : {});
-    rev = { id: g?.id || null, prospectId: base?.id || null, email: base?.email || '', infos: { ...(c.infos || {}), nom: c.infos?.nom || g?.nom || '' }, droits: { ...droitsDe(g ? c : { droits: { reseau: false, depot: false, achat: true } }) },
+    rev = { id: g?.id || null, prospectId: base?.id || null, email: base?.email || '', infos: { ...(c.infos || {}), nom: c.infos?.nom || g?.nom || '' }, base: c, droits: { reseau: reseauDe(c) }, modules: { ...(c.modules || {}) },
       reseau: { commissionType: 'fixe', commissionValeur: 300, commissionMin: 0, ...(c.reseau || {}) },
       packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo, admin: !!g?.admin,
-      abonnement: { statut: 'essai', debut: auj(), ...(c.abonnement || {}) } };
+      abonnement: { statut: 'essai', debut: auj(), prix: PRIX, ...(c.abonnement || {}) } };
     $('#rev-titre').textContent = g ? g.nom : 'Ajouter un revendeur';
     rendreRevendeur();
     $('#dlg-rev').showModal();
@@ -743,22 +752,28 @@
       : `<div class="field"><label for="rev-email">Email de connexion *</label><input id="rev-email" type="email" autocomplete="off" placeholder="contact@garage.re" value="${esc(r.email || '')}">
           <span class="hint">Il se connecte avec cet email et le mot de passe <b>12345678</b>, puis choisit le sien.</span></div>`}
 
-      ${r.demo || r.admin ? '' : `<h3 class="section">Abonnement (${eur(PRIX)} par mois)</h3>
-      <p class="hint">Premier mois offert, sans engagement. À mettre à jour à la main pour l'instant (Stripe le fera tout seul plus tard).</p>
-      <div class="grid"><div class="field"><label for="abo-statut">Statut</label><select id="abo-statut">
+      ${r.demo || r.admin ? '' : `<h3 class="section">Abonnement</h3>
+      <p class="hint">Offre de base ${eur(PRIX)} par mois, premier mois offert, sans engagement. Avec des options, mets ici le montant convenu.
+        À mettre à jour à la main pour l'instant (Stripe le fera tout seul plus tard).</p>
+      <div class="grid"><div class="field"><label for="abo-prix">Montant mensuel (€)</label><input id="abo-prix" type="number" inputmode="decimal" step="0.01" value="${esc(r.abonnement.prix)}"></div>
+        <div class="field"><label for="abo-statut">Statut</label><select id="abo-statut">
           ${Object.entries(ABO).map(([k, [l]]) => `<option value="${k}"${r.abonnement.statut === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="field"><label for="abo-debut">Début de l'abonnement</label><input id="abo-debut" type="date" value="${esc(r.abonnement.debut)}">
           <span class="hint">Fin de l'essai : ${dateFr(finEssai(r.abonnement.debut))}, premier paiement ce jour-là.</span></div></div>`}
 
-      <h3 class="section">Droits activés</h3>
-      <div class="adm-bloc">${DROITS.map(([k, l, aide]) => `<label class="check"><input type="checkbox" data-droit="${k}"${r.droits[k] ? ' checked' : ''}><span><b>${l}</b><br><small class="hint">${aide}</small></span></label>
+      <h3 class="section">Offre de base · ${eur(PRIX)} par mois</h3>
+      <div class="adm-bloc">${[['reseau', 'Réseau Ocaz', 'Ses véhicules sont partagés avec les autres garages, les apporteurs d\'affaires et sur le site du réseau ; il voit les véhicules partenaires et reçoit les leads.']].map(([k, l, aide]) => `<label class="check"><input type="checkbox" data-droit="${k}"${r.droits[k] ? ' checked' : ''}><span><b>${l}</b><br><small class="hint">${aide}</small></span></label>
         ${k === 'reseau' ? `<div class="grid trois adm-sous" id="rev-com"${r.droits.reseau ? '' : ' hidden'}>
           <div class="field"><label for="rc-type">Commission apporteur</label><select id="rc-type" data-rc="commissionType">
             <option value="fixe"${r.reseau.commissionType === 'fixe' ? ' selected' : ''}>Montant fixe par vente</option>
             <option value="pourcentage"${r.reseau.commissionType === 'pourcentage' ? ' selected' : ''}>% du prix de vente</option></select></div>
           <div class="field"><label for="rc-valeur">Montant (€) ou taux (%)</label><input id="rc-valeur" data-rc="commissionValeur" type="number" inputmode="decimal" value="${esc(r.reseau.commissionValeur)}"></div>
           <div class="field"><label for="rc-min">Minimum (€)</label><input id="rc-min" data-rc="commissionMin" type="number" inputmode="decimal" value="${esc(r.reseau.commissionMin)}"></div></div>` : ''}`).join('')}
-        <p class="hint">Achat-revente seul : pas d'onglet Dépôt vente. Dépôt-vente seul : pas d'onglet Reprise, et son Stock ne montre que les véhicules partenaires.</p></div>
+        <div class="check"><input type="checkbox" checked disabled><span><b>Leads révision</b><br><small class="hint">11 mois après une vente, un lead pour rappeler le client et lui proposer sa révision. Toujours inclus.</small></span></div></div>
+
+      <h3 class="section">Options</h3>
+      <p class="hint">Onglets masqués d'origine : coche ceux que tu ouvres à ce garage (prix au cas par cas, à ajouter au montant mensuel).</p>
+      <div class="adm-bloc">${MODULES.map(([k, l, aide]) => `<label class="check"><input type="checkbox" data-module="${k}"${r.modules[k] ? ' checked' : ''}><span><b>${l}</b><br><small class="hint">${aide}</small></span></label>`).join('')}</div>
 
       <h3 class="section">Packs livraison</h3>
       <p class="hint">Proposés dans chacune de ses offres. « Par défaut » : coché d'office.</p>
@@ -814,10 +829,11 @@
     if ($('#abo-statut')) {
       const statut = $('#abo-statut').value;
       if (statut !== rev.abonnement.statut) { rev.abonnement.maj = auj(); if (statut === 'resilie') rev.abonnement.fin = auj(); else delete rev.abonnement.fin; }
-      rev.abonnement = { ...rev.abonnement, statut, debut: $('#abo-debut').value || auj() };
+      rev.abonnement = { ...rev.abonnement, statut, debut: $('#abo-debut').value || auj(), prix: Number($('#abo-prix').value) || PRIX };
     }
     document.querySelectorAll('#rev-body [data-ri]').forEach(i => { rev.infos[i.dataset.ri] = i.value.trim(); });
     document.querySelectorAll('#rev-body [data-droit]').forEach(i => { rev.droits[i.dataset.droit] = i.checked; });
+    document.querySelectorAll('#rev-body [data-module]').forEach(i => { rev.modules[i.dataset.module] = i.checked; });
     document.querySelectorAll('#rev-body [data-rc]').forEach(i => { rev.reseau[i.dataset.rc] = i.dataset.rc === 'commissionType' ? i.value : Number(i.value) || 0; });
     rev.packs = [...document.querySelectorAll('#rev-packs [data-pack]')].map((l, i) => ({
       id: rev.packs[i]?.id || nouvelId(), nom: l.querySelector('[data-pk=nom]').value.trim(), montant: Number(l.querySelector('[data-pk=montant]').value) || 0,
@@ -831,7 +847,8 @@
     if (email && !emailOk(email)) { toast('Email invalide.'); return; }
     if (rev.infos.siret && !/^\d{14}$/.test(rev.infos.siret.replace(/\s/g, ''))) { toast('Le SIRET doit faire 14 chiffres.'); return; }
     if (rev.packs.some(p => !p.nom)) { toast('Donne un nom à chaque pack (ou supprime-le).'); return; }
-    const config = { infos: rev.infos, droits: rev.droits, reseau: rev.reseau, packs: rev.packs };
+    // On garde les autres réglages déjà posés (ex. logo) et on remplace ceux de la fiche.
+    const config = { ...rev.base, infos: rev.infos, droits: rev.droits, modules: rev.modules, reseau: rev.reseau, packs: rev.packs };
     if (!rev.demo && !rev.admin) config.abonnement = rev.abonnement;
     const btn = $('#rev-ok');
     btn.disabled = true;

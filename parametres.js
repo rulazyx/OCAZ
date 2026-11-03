@@ -34,8 +34,9 @@ const Param = (() => {
     const infos = Object.fromEntries(Object.entries(c.infos || {}).filter(([k, v]) => k !== 'logo' && v !== '' && v != null));
     const garage = { ...DEFAUTS.garage, ...(p.garage || {}), ...infos };
     const reseau = { ...DEFAUTS.reseau, ...(p.reseau || {}) };
-    if (c.droits) {
-      reseau.actif = !!c.droits.reseau;
+    // Réseau Ocaz : inclus dans l'offre de base, sauf si l'admin l'a coupé pour ce garage.
+    if (typeof Sync !== 'undefined' && Sync.role) {
+      reseau.actif = c.droits?.reseau !== false;
       if (reseau.actif && !reseau.accepteLe) reseau.accepteLe = new Date().toISOString();
     }
     if (c.reseau) ['commissionType', 'commissionValeur', 'commissionMin'].forEach(k => { if (c.reseau[k] !== undefined && c.reseau[k] !== '') reseau[k] = c.reseau[k]; });
