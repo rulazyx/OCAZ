@@ -73,12 +73,13 @@ const Cadrage = (() => {
     return { x: cale(cx - w / 2, w, iw), y: cale(cy - h / 2, h, ih), w, h };
   }
 
-  // Cadre automatique : sur le véhicule si on le trouve, sinon centré. { cadre, trouve }.
+  // Cadre automatique : sur le véhicule si on le trouve, sinon centré. { cadre, trouve, erreur }
+  // (erreur : la reconnaissance n'a pas pu se charger, hors ligne ou appareil trop ancien).
   async function auto(img) {
     try {
       const b = await vehicule(img);
       if (b) return { cadre: autour(img, b), trouve: true };
-    } catch (e) { /* hors ligne ou appareil trop ancien : photo centrée */ }
+    } catch (e) { return { cadre: centre(img), trouve: false, erreur: true }; }
     return { cadre: centre(img), trouve: false };
   }
 

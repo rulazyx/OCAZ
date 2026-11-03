@@ -945,6 +945,8 @@ function afficherSync(status, user, role) {
     // Démo : le garage fait partie du réseau, pour montrer les leads de l'apporteur de démo.
     if (demo && !Param.get().reseau.accepteLe) Param.save({ reseau: { ...Param.get().reseau, actif: true, accepteLe: new Date().toISOString() } });
     if (onglet === 'donnees') render();
+    // Photos prises avant le cadrage automatique : recadrées une fois sur le véhicule.
+    setTimeout(() => Photos.recadrerAnciennes(), 3000);
   }
   // Déconnexion : les données quittent l'appareil (elles restent en ligne).
   if (!user && etaitConnecte) { etaitConnecte = false; vitrineDemarree = false; EnLigne.arreter(); Reseau.arreter(); Messagerie.arreter(); db.vider(); switchTab(ongletAccueil()); }
