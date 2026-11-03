@@ -67,7 +67,7 @@ body {
 h2 { font-size: max(26px, 4.4cqw); line-height: 1.05; font-weight: 800; letter-spacing: -.025em; margin: 1.2cqw 0 0; text-wrap: balance; max-width: 22ch; }
 h2 em { font-style: normal; color: var(--accent); }
 .lead { font-size: max(14px, 1.65cqw); color: var(--muted); margin: 1.4cqw 0 0; max-width: 52ch; line-height: 1.5; }
-.body { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding-top: 3cqw; }
+.body { flex: 1; display: flex; flex-direction: column; justify-content: safe center; min-height: 0; padding-top: 3cqw; }
 
 .foot { position: absolute; left: 7cqw; right: 7cqw; bottom: 2.6cqw; display: flex; justify-content: space-between; font-size: max(10px, .95cqw); color: var(--muted); font-variant-numeric: tabular-nums; }
 .foot b { font-family: var(--f-logo); font-weight: 800; letter-spacing: .04em; color: var(--graphite); }
@@ -134,7 +134,7 @@ h2 em { font-style: normal; color: var(--accent); }
 .step::before { counter-increment: s; content: counter(s); font-weight: 800; font-size: max(26px, 3.6cqw); color: var(--accent); line-height: 1; }
 .step h3 { margin: 0; font-size: max(15px, 1.75cqw); }
 .step p { margin: 0; color: var(--muted); font-size: max(12px, 1.3cqw); line-height: 1.5; }
-.note { margin-top: 2.4cqw; display: inline-flex; gap: .8em; align-items: center; align-self: flex-start; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; font-size: max(12px, 1.3cqw); padding: .8em 1.3em; border-radius: 999px; }
+.note { margin-top: 2.4cqw; display: inline-flex; gap: .8em; align-items: center; align-self: center; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; font-size: max(12px, 1.3cqw); padding: .8em 1.3em; border-radius: 999px; }
 
 /* Slide 9 : modules */
 .chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.6cqw; }
@@ -183,7 +183,7 @@ h2 em { font-style: normal; color: var(--accent); }
 .sign b { color: var(--night-fg); }
 
 /* Téléphone : les slides deviennent des cartes à hauteur libre */
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   .slide { aspect-ratio: auto; padding: 28px 20px 44px; }
   .foot { left: 20px; right: 20px; bottom: 14px; }
   .cards, .duo, .steps, .road, .offer, .split, .chips { grid-template-columns: minmax(0, 1fr); }
@@ -269,9 +269,9 @@ body.present .nav { display: flex; }
 .search .empty .zero { font-size: max(40px, 6cqw); font-weight: 800; color: var(--ink); line-height: 1; }
 
 .mini-stock { margin-top: auto; border: 1px dashed var(--line); border-radius: 1cqw; padding: 1.2cqw; display: flex; gap: 1.2cqw; align-items: center; background: var(--paper); }
-.mini-stock { flex-direction: column; align-items: stretch; padding: .8cqw; gap: .8cqw; border-style: solid; background: var(--card); }
-.mini-stock .ph { width: 100%; aspect-ratio: 16/9; object-fit: cover; object-position: center 62%; border-radius: .7cqw; display: block; max-width: 100%; }
-.mini-stock > div { padding: 0 .4cqw .2cqw; }
+.mini-stock { flex-direction: row; align-items: center; padding: .7cqw; gap: 1cqw; border-style: solid; background: var(--card); }
+.mini-stock .ph { width: 48%; aspect-ratio: 4/3; object-fit: cover; object-position: center 60%; border-radius: .6cqw; display: block; max-width: 100%; flex: none; }
+.mini-stock > div { min-width: 0; }
 .mini-stock b { display: block; font-size: max(12px, 1.25cqw); }
 .mini-stock span { font-size: max(11px, 1.05cqw); color: var(--muted); }
 .btn1 { margin-top: auto; align-self: flex-start; background: var(--graphite); color: #fff; font-weight: 700; font-size: max(12px, 1.2cqw); padding: .7em 1.2em; border-radius: 999px; display: inline-flex; gap: .6em; align-items: center; }
@@ -327,7 +327,7 @@ body.present .nav { display: flex; }
 .contact-line b { color: var(--night-fg); user-select: all; }
 .contact-line svg { color: var(--accent); margin-right: .5em; }
 
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   .poles, .scene, .track, .opts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .pole, .bubble, .opt { padding: 18px; border-radius: 14px; }
   .bubble::after { display: none; }
