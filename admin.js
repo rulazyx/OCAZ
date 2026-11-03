@@ -453,6 +453,7 @@
     const signes = n('signe'), demos = n('demo_faite') + n('essai') + signes;
     $('#vue').innerHTML = `<div class="ap-page">
       <div class="adm-tete"><h2>Prospection</h2><span class="chips">
+        <button type="button" id="btn-diapo" title="Ouvrir la présentation OCAZ">DIAPO</button>
         <button type="button" id="btn-importer">Importer un fichier CSV</button>
         <button type="button" class="jaune" id="btn-pro-ajouter">${icon('plus', 18)}<span>Nouvel entretien</span></button></span></div>
       ${prospects.length ? `<div class="kpis">
@@ -971,6 +972,7 @@
         afficher(); return;
       }
       if (e.target.closest('#btn-pro-ajouter')) { ouvrirProspect(null, null, 'entretien'); return; }
+      if (e.target.closest('#btn-diapo')) { location.href = 'diapo.html'; return; }
       if (e.target.closest('#btn-importer')) { $('#pro-fichier').click(); return; }
       if (e.target.closest('#btn-publier')) { publierAnnonce(); return; }
       const pr = e.target.closest('[data-pro]');
