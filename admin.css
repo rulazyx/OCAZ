@@ -93,3 +93,4 @@ button.danger.plein:not(:disabled) { background: var(--danger); color: #fff; bor
 .adm-en-anciens { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 12px; margin: 0 0 12px; font-size: 13.5px; }
 .adm-en-anciens dt { color: var(--muted); }
 .adm-en-anciens dd { margin: 0; white-space: pre-wrap; }
+button.danger.plein { transition: none; }
