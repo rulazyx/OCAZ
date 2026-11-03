@@ -65,6 +65,7 @@
   let pro = null; // fiche prospect ouverte
   let etapes = null, editionEtapes = false, etapesAvant = null; // mes étapes (tableau de bord)
   let editionObjectifs = false, objectifsBrouillon = null; // paliers en cours de modification
+  let plaque = null; // recherche par plaque payante : { actif, plafond_mois, mois }
   let rev = null, app = null; // fiches ouvertes
 
   function toast(msg) {
@@ -278,6 +279,7 @@
         <div><span>Garages partenaires : <b>${partenaires.length}</b></span>${paliers(partenaires.length)}</div>
         ${signes != null ? `<div><span>Prospection : <b>${signes}</b> signé(s) sur ${prospects.length} garage(s) démarché(s)</span>${barre(signes, Math.max(prospects.length, 1))}</div>` : ''}
       </div>`}
+      ${blocPlaque()}
       ${blocEtapes()}
       ${endormis.length || attente.length ? `<h3 class="section">À surveiller</h3><div class="adm-bloc">
         ${endormis.map(g => `<div class="adm-compte"><span><b>${esc(g.nom)}</b><small>Pas connecté depuis ${joursDepuis(g.derniere_connexion) === Infinity ? 'le début' : joursDepuis(g.derniere_connexion) + ' jours'} : appelle-le avant qu'il résilie.</small></span></div>`).join('')}
@@ -289,6 +291,32 @@
         <tbody>${tableau.garages.map(ligne).join('') || '<tr><td colspan="7">Aucun garage.</td></tr>'}</tbody></table></div>
     </div>`;
   }
+  // Recherche par plaque payante (0,20 € la recherche) : coupée par défaut, l'admin l'active ici.
+  function blocPlaque() {
+    if (!plaque) return '';
+    const n = plaque.mois;
+    return `<h3 class="section">Recherche par plaque (payante)</h3>
+      <div class="adm-bloc" id="plaque-bloc">
+        <p><span class="badge ${plaque.actif ? 'b-green' : 'b-red'}">${plaque.actif ? 'Activée' : 'Coupée'}</span>
+          ${n != null ? ` Ce mois-ci : <b>${n}</b> recherche(s) payée(s), environ ${eur(n * 0.2)}.` : ''}</p>
+        <p class="hint">${plaque.actif ? 'Chaque nouvelle plaque coûte 0,20 € (une plaque déjà cherchée est gratuite). Elle s\'arrête toute seule au plafond.' : 'Aucune recherche payante ne part. Le scan de la carte grise (gratuit) et la saisie à la main remplissent les fiches.'}</p>
+        <div class="field"><label for="plaque-plafond">Plafond par mois, tous garages (0 = aucune)</label>
+          <input id="plaque-plafond" type="number" inputmode="numeric" min="0" value="${esc(plaque.plafond_mois)}"></div>
+        <div class="adm-publier chips"><button type="button" class="chip${plaque.actif ? '' : ' active'}" id="plaque-basculer">${plaque.actif ? 'Couper' : 'Activer'}</button>
+          <button type="button" class="chip" id="plaque-plafond-ok">Enregistrer le plafond</button></div>
+      </div>`;
+  }
+  async function enregistrerPlaque(actif) {
+    const plafond = Math.max(0, parseInt($('#plaque-plafond')?.value, 10) || 0);
+    if (actif && !confirm(`Activer la recherche par plaque payante (0,20 € la recherche, ${plafond} au maximum par mois, soit ${eur(plafond * 0.2)}) ?`)) return;
+    try {
+      await rpc('crm_admin_reglage_ecrire', { p_cle: 'plaque', p_valeur: { actif, plafond_mois: plafond } });
+      plaque = { ...plaque, actif, plafond_mois: plafond };
+      afficher();
+      toast(actif ? 'Recherche par plaque activée' : 'Recherche par plaque coupée');
+    } catch (err) { toast(err.message); }
+  }
+
   // Objectifs : un palier par ligne (nombre de garages + libellé), triés du plus petit au plus grand.
   function blocObjectifsEdition() {
     return `<div class="adm-bloc" id="objectifs-edition">
@@ -422,6 +450,8 @@
   async function chargerTableau() {
     if (!etapes) rpc('crm_admin_reglage_lire', { p_cle: 'etapes' }).then(v => { etapes = completerEtapes(v); if (onglet === 'tableau') afficher(); },
       () => { etapes = ETAPES_DEPART; if (onglet === 'tableau') afficher(); });
+    Promise.all([rpc('crm_admin_reglage_lire', { p_cle: 'plaque' }), rpc('crm_admin_plaque_mois').catch(() => null)])
+      .then(([v, n]) => { plaque = { actif: v?.actif === true, plafond_mois: Number(v?.plafond_mois ?? 50), mois: n }; if (onglet === 'tableau') afficher(); }, () => {});
     try { [tableau, prospects] = await Promise.all([rpc('crm_admin_tableau'), prospects ? prospects : rpc('crm_admin_prospects').catch(() => null)]); }
     catch (err) { toast(err.message); tableau = { garages: [], apporteurs: 0, leads_30j: 0, ventes_reseau_30j: 0 }; }
     if (onglet === 'tableau') afficher();
@@ -987,6 +1017,8 @@
         afficher(); document.querySelector(`#etapes-edition [data-etape-i="${i + 1}"] [data-ee=titre]`)?.focus(); return;
       }
       if (e.target.id === 'objectifs-modifier') { objectifsBrouillon = PALIERS.map(x => [...x]); editionObjectifs = true; afficher(); return; }
+      if (e.target.id === 'plaque-basculer') { enregistrerPlaque(!plaque.actif); return; }
+      if (e.target.id === 'plaque-plafond-ok') { enregistrerPlaque(plaque.actif); return; }
       if (e.target.id === 'objectifs-annuler') { editionObjectifs = false; afficher(); return; }
       if (e.target.id === 'objectifs-ok') { enregistrerObjectifs(); return; }
       if (e.target.id === 'objectif-ajouter') { lireObjectifs(); const d = objectifsBrouillon[objectifsBrouillon.length - 1]; objectifsBrouillon.push([d ? Number(d[0]) * 2 || '' : 5, '']); afficher(); return; }
