@@ -80,6 +80,9 @@ const EntreeStock = (() => {
       .replace(/ Choisis d'abord le [^<]*/, ' Choisis le vendeur juste au-dessus.');
     $('#entree-titre').textContent = 'Rentrer en stock · ' + vehiculeNom(v);
     $('#entree-body').innerHTML = `
+      <div class="s-cg"><label class="button" id="s-cg-label">🪪 Scanner la carte grise<input id="s-cg-input" type="file" accept="image/*" hidden></label>
+        <span class="hint" id="s-cg-info">${cgInfo ? esc(cgInfo) : 'Remplit les cases vides avec ce qui est lu sur la carte grise (VIN, date de mise en circulation, puissance, cylindrée, places…).'}</span></div>
+
       <h3 class="section">Photos <span class="hint" id="s-photos-n"></span></h3>
       <div id="s-photos" class="s-photos"></div>
       <div class="inline s-photo-btns">
@@ -87,8 +90,6 @@ const EntreeStock = (() => {
       </div>
 
       <h3 class="section">Informations</h3>
-      <div class="s-cg"><label class="button" id="s-cg-label">📷 Scanner la carte grise<input id="s-cg-input" type="file" accept="image/*" hidden></label>
-        <span class="hint" id="s-cg-info">${cgInfo ? esc(cgInfo) : 'Remplit les cases vides avec ce qui est lu sur la carte grise (VIN, date de mise en circulation, puissance, cylindrée, places…).'}</span></div>
       <p class="hint">${vides ? `Repris de la reprise. <strong>${vides} info${vides > 1 ? 's' : ''} à compléter</strong> (cadres en jaune).` : 'Repris de la reprise : tout est rempli, vérifie simplement.'}</p>
       <div class="grid">${INFOS_().map(([k, l, t]) => champ(k, l, t)).join('')}</div>
 
