@@ -95,13 +95,19 @@ const Photos = (() => {
     return finir(c);
   }
 
+  // Les photos déjà cadrées sur le véhicule finissent par « -c.jpg » : les autres (prises avant le cadrage) sont
+  // recadrées une fois, en arrière-plan (recadrerAnciennes).
+  const CADREE = /-c\.jpg$/;
+  const nom = cadree => Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + (cadree ? '-c' : '') + '.jpg';
+
   // Remplace une photo enregistrée par une nouvelle version (floutée ou recadrée), à la même place dans la liste.
-  async function remplacer(chemin, blob) {
-    const nouveau = chemin.replace(/[^/]+$/, Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg');
+  async function remplacer(chemin, blob, { cadree = CADREE.test(chemin), vid = vehiculeId } = {}) {
+    const nouveau = chemin.replace(/[^/]+$/, nom(cadree));
     const { error } = await Sync.client.storage.from(BUCKET).upload(nouveau, blob, { contentType: 'image/jpeg' });
     if (error) throw new Error('Photo non enregistrée : ' + error.message);
-    const v = db.get('vehicules', vehiculeId);
-    db.upsert('vehicules', { id: vehiculeId, photos: liste(v).map(p => p === chemin ? nouveau : p) });
+    const v = db.get('vehicules', vid);
+    if (!v) throw new Error('Véhicule supprimé');
+    db.upsert('vehicules', { id: vid, photos: liste(v).map(p => p === chemin ? nouveau : p) });
     Sync.client.storage.from(BUCKET).remove([chemin]);
     liens.delete(chemin);
     return nouveau;
@@ -236,7 +242,7 @@ const Photos = (() => {
       const c = Cadrage.dessiner(img, cadre);
       // Depuis l'origine : retouche et logo refaits. Depuis la photo enregistrée : ils y sont déjà.
       const blob = original ? await finir(c) : await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
-      const nouveau = await remplacer(chemin, blob);
+      const nouveau = await remplacer(chemin, blob, { cadree: true });
       originaux.delete(chemin);
       if (original) originaux.set(nouveau, original);
     } catch (e) { toast(e.message); return; }
@@ -385,7 +391,7 @@ const Photos = (() => {
     for (const f of lot) {
       try {
         const blob = await reduire(f);
-        const chemin = `${Sync.entreprise.id}/${vehiculeId}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.jpg`;
+        const chemin = `${Sync.entreprise.id}/${vehiculeId}/${nom(Param.get().photos.cadrer)}`;
         const { error } = await Sync.client.storage.from(BUCKET).upload(chemin, blob, { contentType: 'image/jpeg' });
         if (error) throw new Error(error.message);
         const actuel = db.get('vehicules', vehiculeId);
@@ -432,5 +438,39 @@ const Photos = (() => {
     });
   }
 
-  return { estTelephone, deblocable, galerie, hydrater, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
+  // Photos prises avant le cadrage automatique : recadrées une fois sur le véhicule, en arrière-plan, à la connexion
+  // (véhicules non vendus). Une photo où aucun véhicule n'est trouvé n'est pas touchée et n'est plus réessayée.
+  let migration = false, indisponible = false;
+  const ESSAYEES = 'ocaz-cadrage-essaye';
+  async function recadrerAnciennes() {
+    if (migration || indisponible || !Param.get().photos.cadrer || !Sync.client || !Sync.role || !Sync.entreprise?.id) return;
+    let essayees = [];
+    try { essayees = JSON.parse(localStorage.getItem(ESSAYEES)) || []; } catch (e) { /* rien */ }
+    const aFaire = db.all('vehicules').filter(v => v.statut !== 'Vendu')
+      .flatMap(v => liste(v).filter(p => !CADREE.test(p) && !/exemple\.jpg$/.test(p) && !essayees.includes(p)).map(p => [v.id, p]));
+    if (!aFaire.length) return;
+    migration = true;
+    let n = 0;
+    try {
+      for (const [vid, p] of aFaire) {
+        // La photo a pu changer entre-temps (supprimée, floutée, recadrée à la main).
+        if (!liste(db.get('vehicules', vid)).includes(p)) continue;
+        let url, img;
+        try { [url] = await signer([p]); img = url && await charger(url); } catch (e) { continue; }
+        if (!img) continue;
+        const { cadre, trouve, erreur } = await Cadrage.auto(img);
+        if (erreur) { indisponible = true; break; } // reconnaissance indisponible : nouvel essai à la prochaine ouverture
+        if (!trouve) { essayees.push(p); continue; }
+        const c = Cadrage.dessiner(img, cadre);
+        const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+        try { await remplacer(p, blob, { cadree: true, vid }); n++; } catch (e) { /* hors ligne : plus tard */ }
+      }
+    } finally {
+      migration = false;
+      try { localStorage.setItem(ESSAYEES, JSON.stringify(essayees.slice(-300))); } catch (e) { /* rien */ }
+    }
+    if (n) { toast(`${n} photo${n > 1 ? 's' : ''} recadrée${n > 1 ? 's' : ''} sur le véhicule`); render(); }
+  }
+
+  return { recadrerAnciennes, estTelephone, deblocable, galerie, hydrater, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
 })();
