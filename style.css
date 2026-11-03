@@ -680,3 +680,7 @@ dialog.visionneuse::backdrop { background: #000; }
 .visionneuse .car-fleche { opacity: 1; width: 46px; height: 46px; }
 .visionneuse .car-compteur { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); font-size: 14px; padding: 4px 12px; }
 .vis-fermer { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.15); color: #fff; font-size: 20px; }
+/* Scan de la carte grise dans la reprise */
+.r-cg { gap: 6px; }
+.r-cg > label.button { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--text); border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
+.r-cg .button.busy { opacity: .55; pointer-events: none; }

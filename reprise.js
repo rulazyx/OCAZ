@@ -13,6 +13,8 @@ const Reprise = (() => {
   let etat = null;
   let extra = {}; // données complètes renvoyées par la recherche par plaque
   let trouve = ''; // véhicule trouvé par la plaque, affiché sous le champ
+  let cgPhoto = null; // photo de la carte grise scannée, rangée dans les documents du véhicule à l'enregistrement
+  let cgLu = []; // infos lues sur la carte grise, affichées sous le bouton
 
   // Fourchette de reprise : prix de revente estimé à La Réunion, moins les frais, moins la marge visée.
   function calcul(v) {
@@ -57,6 +59,8 @@ const Reprise = (() => {
     $('#reprise-body').innerHTML = `
       ${etat.image ? `<div class="vehicule-image"><img src="${esc(etat.image)}" alt="" onerror="this.parentNode.remove()"></div>` : ''}
       <div class="lookup">
+        <div class="field r-cg"><label class="button ph-btn" id="r-cg-label">📷 Scanner la carte grise<input id="r-cg-input" type="file" accept="image/*" hidden></label>
+          <span class="hint" id="r-cg-info">${cgLu.length ? 'Lu sur la carte grise : ' + esc(cgLu.join(' · ')) + '. Vérifie, la lecture peut se tromper.' : 'Photo ou image de la carte grise : la plaque, le VIN, la marque, la date de mise en circulation, l\'énergie et la puissance sont lus, puis la plaque complète le reste.'}</span></div>
         <div class="field"><label for="r-immatriculation">Plaque d'immatriculation</label>
           <div class="inline"><input id="r-immatriculation" data-r="immatriculation" value="${esc(etat.immatriculation || '')}" placeholder="AB-123-CD" autocapitalize="characters">
           <button type="button" id="r-btn-plaque">Rechercher</button></div>
@@ -132,7 +136,7 @@ const Reprise = (() => {
 
   function ouvrir(id, preset = {}) {
     etat = id ? { ...db.get('vehicules', id) } : { statut: 'Reprise à étudier', mode: 'achat', ...preset };
-    extra = {}; trouve = '';
+    extra = {}; trouve = ''; cgPhoto = null; cgLu = [];
     if (id) page2(); else page1();
     $('#dlg-reprise').showModal();
   }
@@ -145,7 +149,58 @@ const Reprise = (() => {
       ...(enBase ? { documents: enBase.documents, annonces: enBase.annonces } : {}) });
     etat = { ...saved };
     extra = {}; trouve = '';
+    if (cgPhoto) { rangerCarteGrise(saved.id, cgPhoto); cgPhoto = null; }
     return saved;
+  }
+
+  // La photo de la carte grise est rangée dans les documents du véhicule (bucket privé du garage).
+  async function rangerCarteGrise(id, f) {
+    if (!Sync.role || !Sync.entreprise) return;
+    try {
+      const doc = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const chemin = `${Sync.entreprise.id}/vehicules/${id}/${doc}.jpg`;
+      await Fichiers.envoyerFichier(f, chemin);
+      const v = db.get('vehicules', id);
+      if (!v) return;
+      db.upsert('vehicules', { id, documents: (v.documents || []).concat({ id: doc, type: 'Carte grise', piece: 'carteGrise', nom: 'Carte grise.jpg', chemin, date: today() }) });
+      if (etat?.id === id) etat.documents = db.get('vehicules', id).documents;
+    } catch (e) { toast('Carte grise non rangée dans les documents : ' + e.message); }
+  }
+
+  // Scan de la carte grise : lecture sur l'appareil (gratuite), puis recherche par plaque pour compléter.
+  const LU = { immatriculation: 'plaque', vin: 'VIN', marque: 'marque', modele: 'modèle', annee: 'année',
+    carburant: 'énergie', puissanceCh: 'ch', puissanceFiscale: 'CV', cylindree: 'cm³', places: 'places' };
+  async function scannerCarteGrise(brut) {
+    const info = $('#r-cg-info'), label = $('#r-cg-label');
+    label.classList.add('busy');
+    info.textContent = 'Lecture de la carte grise… (quelques secondes, plus la première fois)';
+    let r = {};
+    try {
+      const f = await Scan.reduire(brut);
+      cgPhoto = f;
+      r = await Scan.lire('carteGrise', f);
+    } catch (e) {
+      label.classList.remove('busy');
+      info.textContent = e.message;
+      return;
+    }
+    label.classList.remove('busy');
+    if (r.immatriculation) r.immatriculation = formatPlaque(r.immatriculation);
+    if (r.vin && !r.marque) { const d = VIN.decode(r.vin); if (d.ok && d.marque) r.marque = d.marque; }
+    // La carte grise décrit ce véhicule : ses infos remplacent celles déjà saisies.
+    ['immatriculation', 'marque', 'modele', 'annee', 'carburant'].forEach(k => { if (r[k]) etat[k] = r[k]; });
+    ['typeVariante', 'vin', 'miseEnCirculation', 'puissanceCh', 'puissanceFiscale', 'cylindree', 'places', 'co2', 'genre'].forEach(k => { if (r[k]) extra[k] = r[k]; });
+    if (r.genre === 'CTTE' || r.genre === 'DERIV-VP') extra.type = 'Utilitaire';
+    cgLu = Object.keys(LU).filter(k => r[k]).map(k => k === 'puissanceCh' || k === 'puissanceFiscale' || k === 'cylindree' || k === 'places' ? `${r[k]} ${LU[k]}` : `${LU[k]} ${r[k]}`);
+    if (!cgLu.length) {
+      const ext = extra; page1(); extra = ext;
+      $('#r-cg-info').textContent = 'Rien de lisible sur la photo. Reprends-la à plat, bien éclairée, sans reflet, en cadrant toute la carte. Tu peux aussi saisir la plaque.';
+      return;
+    }
+    const ext = extra; page1(); extra = ext;
+    // La plaque lue complète le reste (modèle exact, version, boîte, image) avec la recherche habituelle.
+    if (etat.immatriculation && Sync.user) $('#r-btn-plaque')?.click();
+    else toast('Carte grise lue : vérifie les infos');
   }
 
   function init() {
@@ -157,6 +212,12 @@ const Reprise = (() => {
       if ($('#r-fourchette')) majCalcul();
     });
     body.addEventListener('change', e => {
+      if (e.target.id === 'r-cg-input') {
+        const f = e.target.files[0];
+        e.target.value = '';
+        if (f) scannerCarteGrise(f);
+        return;
+      }
       const k = e.target.dataset.r;
       if (k) etat[k] = e.target.value;
     });
