@@ -18,7 +18,7 @@ const Param = (() => {
     // Réseau Ocaz : véhicules partagés avec les apporteurs d'affaires, et commission versée par le garage sur chaque vente apportée.
     reseau: { actif: false, commissionType: 'fixe', commissionValeur: 300, commissionMin: 0, partageDefaut: true, accepteLe: '', publieLe: '' },
     // Photos : retouche automatique (lumière, couleurs) et logo du garage en filigrane, appliqués à l'envoi.
-    photos: { ameliorer: true, logo: true },
+    photos: { cadrer: true, ameliorer: true, logo: true },
     activite: { mode: 'achat', commissionType: 'pourcentage', commissionValeur: 8, commissionMin: 500, dureeMandat: 90 },
     documents: [],
   };

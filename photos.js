@@ -7,6 +7,9 @@ const Photos = (() => {
   const liens = new Map(); // chemin → lien temporaire signé
   let vehiculeId = null;
   let envois = 0;
+  // Photo d'origine (avant cadrage, retouche et logo) des photos ajoutées depuis l'ouverture de l'appli :
+  // recadrer repart d'elle, sans perte. Pour les autres, on recadre la photo enregistrée.
+  const originaux = new Map(); // chemin → fichier
 
   // Prise de vue réservée au téléphone (écran tactile sans souris).
   const estTelephone = () => matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
@@ -65,21 +68,51 @@ const Photos = (() => {
     ctx.restore();
   }
 
-  // Réduit la photo (1600 px de large au plus, JPEG) : environ 300 Ko au lieu de plusieurs Mo. Retouche et logo selon les réglages.
-  async function reduire(fichier) {
+  const lireFichier = async fichier => {
     const src = URL.createObjectURL(fichier);
-    const img = await charger(src);
-    const echelle = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.naturalWidth * echelle);
-    c.height = Math.round(img.naturalHeight * echelle);
+    try { return await charger(src); } finally { URL.revokeObjectURL(src); }
+  };
+
+  // Retouche et logo selon les réglages, puis JPEG.
+  async function finir(c) {
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    URL.revokeObjectURL(src);
     const r = Param.get().photos;
     if (r.ameliorer) ameliorer(ctx, c.width, c.height);
     if (r.logo) await filigrane(ctx, c.width, c.height).catch(() => {});
     return new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.82));
+  }
+
+  // Réduit la photo (1600 px de large au plus, JPEG) : environ 300 Ko au lieu de plusieurs Mo.
+  // Cadrage sur le véhicule (format 4:3, voir cadrage.js), retouche et logo selon les réglages.
+  async function reduire(fichier) {
+    const img = await lireFichier(fichier);
+    if (Param.get().photos.cadrer) return finir(Cadrage.dessiner(img, (await Cadrage.auto(img)).cadre));
+    const echelle = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * echelle);
+    c.height = Math.round(img.naturalHeight * echelle);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return finir(c);
+  }
+
+  // Remplace une photo enregistrée par une nouvelle version (floutée ou recadrée), à la même place dans la liste.
+  async function remplacer(chemin, blob) {
+    const nouveau = chemin.replace(/[^/]+$/, Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg');
+    const { error } = await Sync.client.storage.from(BUCKET).upload(nouveau, blob, { contentType: 'image/jpeg' });
+    if (error) throw new Error('Photo non enregistrée : ' + error.message);
+    const v = db.get('vehicules', vehiculeId);
+    db.upsert('vehicules', { id: vehiculeId, photos: liste(v).map(p => p === chemin ? nouveau : p) });
+    Sync.client.storage.from(BUCKET).remove([chemin]);
+    liens.delete(chemin);
+    return nouveau;
+  }
+
+  // Un seul écran à la fois dans la fenêtre Photos : la grille, le floutage ou le cadrage.
+  function ecran(nom) {
+    $('#photos-normal').hidden = nom !== 'normal';
+    $('#photos-flou').hidden = nom !== 'flou';
+    $('#photos-cadre').hidden = nom !== 'cadre';
+    $('#dlg-photos .o-actions').hidden = nom !== 'normal';
   }
 
   // Floutage de la plaque (ou d'un visage) : on trace un ou plusieurs cadres sur la photo, la zone est pixelisée.
@@ -88,9 +121,7 @@ const Photos = (() => {
     const [url] = await signer([chemin]);
     try { flou = { chemin, img: await charger(url), zones: [] }; }
     catch (e) { toast(e.message); return; }
-    $('#photos-flou').hidden = false;
-    $('#photos-normal').hidden = true;
-    $('#dlg-photos .o-actions').hidden = true;
+    ecran('flou');
     dessinerFlou();
   }
   function pixeliser(ctx, z) {
@@ -112,18 +143,14 @@ const Photos = (() => {
     $('#flou-appliquer').disabled = !zones.length;
     $('#flou-annuler-zone').disabled = !zones.length;
   }
-  function fermerFlou() { flou = null; $('#photos-flou').hidden = true; $('#photos-normal').hidden = false; $('#dlg-photos .o-actions').hidden = false; }
+  function fermerFlou() { flou = null; ecran('normal'); }
   async function appliquerFlou() {
     const { chemin } = flou;
     $('#flou-appliquer').disabled = true;
     const blob = await new Promise(ok => $('#flou-canvas').toBlob(ok, 'image/jpeg', 0.85));
-    const nouveau = chemin.replace(/[^/]+$/, Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg');
-    const { error } = await Sync.client.storage.from(BUCKET).upload(nouveau, blob, { contentType: 'image/jpeg' });
-    if (error) { toast('Photo non enregistrée : ' + error.message); $('#flou-appliquer').disabled = false; return; }
-    const v = db.get('vehicules', vehiculeId);
-    db.upsert('vehicules', { id: vehiculeId, photos: liste(v).map(p => p === chemin ? nouveau : p) });
-    Sync.client.storage.from(BUCKET).remove([chemin]);
-    liens.delete(chemin);
+    try { await remplacer(chemin, blob); } catch (e) { toast(e.message); $('#flou-appliquer').disabled = false; return; }
+    // La photo d'origine n'a pas le floutage : un recadrage repartira de la photo floutée.
+    originaux.delete(chemin);
     fermerFlou();
     toast('Zone floutée');
     rendre();
@@ -145,6 +172,115 @@ const Photos = (() => {
     $('#flou-annuler-zone').addEventListener('click', () => { flou.zones.pop(); dessinerFlou(); });
     $('#flou-retour').addEventListener('click', fermerFlou);
     $('#flou-appliquer').addEventListener('click', () => appliquerFlou().catch(err => toast(err.message)));
+  }
+
+  // Cadrage d'une photo : glisser pour déplacer, pincer (ou molette, ou curseur) pour zoomer ou dézoomer.
+  // « Sur le véhicule » recadre automatiquement, « Toute la photo » dézoome pour tout voir.
+  let cad = null; // { chemin, img, mini, s, original, cadre, base, zmin }
+  const ZMAX = 4;
+  async function ouvrirCadre(chemin) {
+    let img, original = originaux.get(chemin) || null;
+    try {
+      if (original) img = await lireFichier(original);
+      else { const [url] = await signer([chemin]); img = await charger(url); }
+    } catch (e) { toast(e.message); return; }
+    // Copie réduite pour l'aperçu : fluide au doigt même avec une photo de 12 Mpx.
+    const s = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
+    const mini = document.createElement('canvas');
+    mini.width = Math.round(img.naturalWidth * s); mini.height = Math.round(img.naturalHeight * s);
+    mini.getContext('2d').drawImage(img, 0, 0, mini.width, mini.height);
+    const base = Cadrage.centre(img);
+    cad = { chemin, img, mini, s, original, base, zmin: Math.min(1, base.w / Cadrage.entier(img).w) * 0.8, cadre: { ...base } };
+    ecran('cadre');
+    $('#cadre-etat').textContent = original ? '' : 'Photo déjà enregistrée : la retouche et le logo restent tels quels.';
+    dessinerCadre();
+    // Photo d'origine : on part du cadrage automatique. Photo déjà enregistrée (déjà cadrée) : on part de la photo entière.
+    if (original) cadrerAuto();
+  }
+  const zoomDe = c => cad.base.w / c.w;
+  function fixerZoom(z, cx, cy) {
+    const c = cad.cadre;
+    z = Math.min(ZMAX, Math.max(cad.zmin, z));
+    cx ??= c.x + c.w / 2; cy ??= c.y + c.h / 2;
+    const w = cad.base.w / z, h = w / Cadrage.RATIO;
+    cad.cadre = { x: cx - w / 2, y: cy - h / 2, w, h };
+    borner();
+  }
+  // Le centre du cadre reste sur la photo : on ne peut pas la faire sortir complètement.
+  function borner() {
+    const c = cad.cadre, iw = cad.img.naturalWidth, ih = cad.img.naturalHeight;
+    const cx = Math.min(iw, Math.max(0, c.x + c.w / 2)), cy = Math.min(ih, Math.max(0, c.y + c.h / 2));
+    c.x = cx - c.w / 2; c.y = cy - c.h / 2;
+  }
+  function dessinerCadre() {
+    const { cadre: c, s } = cad;
+    Cadrage.dessiner(cad.mini, { x: c.x * s, y: c.y * s, w: c.w * s, h: c.h * s }, 800, 600, $('#cadre-canvas'));
+    const z = $('#cadre-zoom');
+    z.min = cad.zmin; z.max = ZMAX; z.value = zoomDe(c);
+  }
+  async function cadrerAuto() {
+    const b = $('#cadre-auto');
+    b.disabled = true; b.textContent = 'Recherche du véhicule…';
+    const { cadre, trouve } = await Cadrage.auto(cad.img);
+    b.disabled = false; b.textContent = 'Sur le véhicule';
+    if (!cad) return;
+    if (!trouve) toast('Véhicule non trouvé sur la photo : cadre-la à la main.');
+    cad.cadre = cadre;
+    dessinerCadre();
+  }
+  function fermerCadre() { cad = null; ecran('normal'); }
+  async function appliquerCadre() {
+    const { chemin, img, original, cadre } = cad;
+    $('#cadre-appliquer').disabled = true;
+    try {
+      const c = Cadrage.dessiner(img, cadre);
+      // Depuis l'origine : retouche et logo refaits. Depuis la photo enregistrée : ils y sont déjà.
+      const blob = original ? await finir(c) : await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+      const nouveau = await remplacer(chemin, blob);
+      originaux.delete(chemin);
+      if (original) originaux.set(nouveau, original);
+    } catch (e) { toast(e.message); return; }
+    finally { $('#cadre-appliquer').disabled = false; }
+    fermerCadre();
+    toast('Photo recadrée');
+    rendre();
+  }
+  function initCadre() {
+    const c = $('#cadre-canvas');
+    const doigts = new Map(); // pointerId → { x, y }
+    let pince = null; // { d, z } au début du pincement
+    const dist = () => { const [a, b] = [...doigts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    c.addEventListener('pointerdown', e => {
+      if (!cad) return;
+      c.setPointerCapture(e.pointerId);
+      doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (doigts.size === 2) pince = { d: dist(), z: zoomDe(cad.cadre) };
+      e.preventDefault();
+    });
+    c.addEventListener('pointermove', e => {
+      const avant = doigts.get(e.pointerId);
+      if (!cad || !avant) return;
+      const maintenant = { x: e.clientX, y: e.clientY };
+      doigts.set(e.pointerId, maintenant);
+      if (doigts.size >= 2 && pince) fixerZoom(pince.z * dist() / Math.max(1, pince.d));
+      else {
+        // Glisser : la photo suit le doigt.
+        const k = cad.cadre.w / c.getBoundingClientRect().width;
+        cad.cadre.x -= (maintenant.x - avant.x) * k;
+        cad.cadre.y -= (maintenant.y - avant.y) * k;
+        borner();
+      }
+      dessinerCadre();
+    });
+    const lever = e => { doigts.delete(e.pointerId); if (doigts.size < 2) pince = null; };
+    c.addEventListener('pointerup', lever);
+    c.addEventListener('pointercancel', lever);
+    c.addEventListener('wheel', e => { if (!cad) return; e.preventDefault(); fixerZoom(zoomDe(cad.cadre) * Math.exp(-e.deltaY * 0.0015)); dessinerCadre(); }, { passive: false });
+    $('#cadre-zoom').addEventListener('input', e => { if (cad) { fixerZoom(+e.target.value); dessinerCadre(); } });
+    $('#cadre-auto').addEventListener('click', () => cad && cadrerAuto());
+    $('#cadre-entier').addEventListener('click', () => { if (cad) { cad.cadre = Cadrage.entier(cad.img); dessinerCadre(); } });
+    $('#cadre-retour').addEventListener('click', fermerCadre);
+    $('#cadre-appliquer').addEventListener('click', () => cad && appliquerCadre());
   }
 
   // Adresses temporaires (1 h) des photos privées, redemandées après 50 minutes.
@@ -214,13 +350,14 @@ const Photos = (() => {
     const urls = await signer(ph);
     $('#photos-grille').innerHTML = ph.map((p, i) => `<div class="ph"><img src="${esc(urls[i])}" alt="Photo ${i + 1}">
       <button type="button" class="ph-suppr" data-suppr="${esc(p)}" aria-label="Supprimer la photo">✕</button>
-      <button type="button" class="ph-flou" data-flou="${esc(p)}">Flouter</button></div>`).join('')
+      <span class="ph-outils"><button type="button" data-cadre="${esc(p)}">Cadrer</button><button type="button" data-flou="${esc(p)}">Flouter</button></span></div>`).join('')
       + Array.from({ length: envois }, () => '<div class="ph envoi"><span class="spin"></span></div>').join('');
     const plein = ph.length + envois >= MAX;
     $('#photos-prendre').classList.toggle('desactive', plein);
     $('#photos-galerie').classList.toggle('desactive', plein);
     $('#photos-terminer').disabled = ph.length < MIN || envois > 0;
     const r = Param.get().photos, logo = !!Param.get().garage.logo;
+    $('#ph-cadrer').checked = r.cadrer;
     $('#ph-ameliorer').checked = r.ameliorer;
     $('#ph-logo').checked = r.logo && logo;
     $('#ph-logo').disabled = !logo;
@@ -231,6 +368,9 @@ const Photos = (() => {
     if (!Sync.role) { toast("Les photos sont envoyées en ligne : connecte-toi d'abord (⚙️ > Compte)."); return; }
     vehiculeId = id;
     fermerFlou();
+    cad = null;
+    // La reconnaissance du véhicule se charge pendant qu'on prend la première photo.
+    if (Param.get().photos.cadrer) Cadrage.charger().catch(() => {});
     rendre();
     $('#dlg-photos').showModal();
   }
@@ -250,6 +390,7 @@ const Photos = (() => {
         if (error) throw new Error(error.message);
         const actuel = db.get('vehicules', vehiculeId);
         db.upsert('vehicules', { id: vehiculeId, photos: liste(actuel).concat(chemin) });
+        originaux.set(chemin, f);
       } catch (err) {
         toast("Photo non envoyée : " + err.message);
       } finally {
@@ -275,13 +416,16 @@ const Photos = (() => {
     $('#photos-grille').addEventListener('click', e => {
       if (e.target.dataset.suppr) supprimer(e.target.dataset.suppr);
       if (e.target.dataset.flou) ouvrirFlou(e.target.dataset.flou);
+      if (e.target.dataset.cadre) ouvrirCadre(e.target.dataset.cadre);
     });
-    ['ameliorer', 'logo'].forEach(k => $('#ph-' + k).addEventListener('change', e => Param.save({ photos: { ...Param.get().photos, [k]: e.target.checked } })));
+    ['cadrer', 'ameliorer', 'logo'].forEach(k => $('#ph-' + k).addEventListener('change', e => Param.save({ photos: { ...Param.get().photos, [k]: e.target.checked } })));
     initFlou();
+    initCadre();
     const fermer = () => { $('#dlg-photos').close(); render(); };
     $('#photos-terminer').addEventListener('click', () => { toast('Photos enregistrées sur la fiche du véhicule'); fermer(); });
     $('#photos-fermer').addEventListener('click', () => {
       if (flou) { fermerFlou(); return; }
+      if (cad) { fermerCadre(); return; }
       const n = liste(db.get('vehicules', vehiculeId)).length;
       if (n < MIN && !confirm(`Il faut au moins ${MIN} photos pour la mise en ligne (${n} pour l'instant). Fermer quand même ?`)) return;
       fermer();

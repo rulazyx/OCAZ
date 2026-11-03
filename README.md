@@ -22,6 +22,10 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   d'achat, prix de vente, entrée en stock, livre de police). Les options cochées remplissent « Options et équipements ».
   Photos (`visionneuse.js`) : elles défilent au doigt sur téléphone et avec les flèches (ou ← →) sur ordinateur, dans les cartes
   du Stock, des Partenaires et sur la fiche ; sur la fiche, un appui ouvre le plein écran.
+  Cadrage (`cadrage.js`) : chaque photo ajoutée est cadrée sur le véhicule au format 4:3 (reconnaissance d'objets
+  COCO-SSD sur l'appareil, servie depuis `vendor/` : poids réduits en 8 bits, 5 Mo, gardés hors ligne). Si le véhicule
+  déborde, la photo est dézoomée et les bords remplis par la photo floutée. « Cadrer » sur une photo permet de
+  déplacer, zoomer ou dézoomer à la main. Le cadrage est enregistré dans la photo : site public, réseau et PDF en profitent.
 - **Commandes** : relie un client et un véhicule, prix, acompte, statut. Le statut du véhicule suit la commande
   (En cours → Réservé, Livrée → Vendu, Annulée → En stock).
 
