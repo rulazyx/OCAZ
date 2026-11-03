@@ -734,6 +734,7 @@
       packs: (Array.isArray(c.packs) ? c.packs : PACKS).map(p => ({ ...p })), comptes: g?.comptes || [], demo: !!g?.demo, admin: !!g?.admin,
       abonnement: { statut: 'essai', debut: auj(), prix: PRIX, ...(c.abonnement || {}) } };
     $('#rev-titre').textContent = g ? g.nom : 'Ajouter un revendeur';
+    $('#rev-suppr').hidden = !(rev.id && !rev.demo && !rev.admin);
     rendreRevendeur();
     $('#dlg-rev').showModal();
   }
@@ -784,7 +785,7 @@
           <button type="button" class="chip" data-pk-suppr="${i}" aria-label="Supprimer ce pack">✕</button></div>`).join('') || '<span class="hint">Aucun pack.</span>'}
         <button type="button" id="rev-pack-ajouter">+ Ajouter un pack</button></div>
 
-      ${r.id && !r.demo && !r.admin ? `<h3 class="section adm-danger-titre">Supprimer ce garage</h3>
+      ${r.id && !r.demo && !r.admin ? `<h3 class="section adm-danger-titre" id="rev-zone-suppr">Supprimer ce garage</h3>
       <div class="adm-bloc adm-danger">
         <p>Efface définitivement <b>${esc(r.infos.nom)}</b> : ses comptes de connexion, son stock et ses véhicules, ses clients, offres et factures,
           ses photos et documents, sa vitrine, ses annonces sur le réseau, ses leads et ses messages. <b>Impossible à annuler.</b></p>
@@ -883,8 +884,33 @@
           <div class="adm-compte"><span>Contrat<small>${a.contrat_signe_le ? `Signé le ${dateFr(a.contrat_signe_le)} (« ${esc(a.signature)} »)` : "Pas encore signé : il le signe dans son espace, à sa première connexion."}</small></span></div>
           <div class="adm-compte"><span>Mot de passe<small>${a.doit_changer_mdp ? 'Mot de passe de départ (12345678)' : 'Choisi par l\'apporteur'}</small></span>
             ${a.demo ? '' : `<button type="button" class="chip" data-reinit="${esc(a.email)}">Réinit. mdp</button>`}</div></div>`
-        : '<p class="adm-info">Il se connecte sur ocaz.re avec cet email et le mot de passe <b>12345678</b>, choisit le sien, puis signe son contrat d\'apporteur en ligne.</p>'}`;
+        : '<p class="adm-info">Il se connecte sur ocaz.re avec cet email et le mot de passe <b>12345678</b>, choisit le sien, puis signe son contrat d\'apporteur en ligne.</p>'}
+      ${a && !a.demo ? `<h3 class="section adm-danger-titre" id="app-zone-suppr">Supprimer cet apporteur</h3>
+      <div class="adm-bloc adm-danger">
+        <p>Efface définitivement <b>${esc(nomApp(a))}</b> : son compte de connexion, ses infos et son RIB, ses leads (y compris chez les garages) et ses messages. <b>Impossible à annuler.</b></p>
+        <p class="hint">Pour seulement le bloquer un temps, utilise plutôt « Suspendre ». Pense à garder ses factures de commission avant.</p>
+        <div class="field"><label for="app-suppr-nom">Pour confirmer, tape son nom : <b>${esc(nomApp(a))}</b></label>
+          <input id="app-suppr-nom" autocomplete="off" spellcheck="false"></div>
+        <div class="adm-publier"><button type="button" class="danger plein" id="app-supprimer" disabled>Supprimer définitivement</button></div></div>` : ''}`;
+    $('#app-suppr').hidden = !(a && !a.demo);
     $('#dlg-app').showModal();
+  }
+  const nomApp = a => [a.prenom, a.nom].filter(Boolean).join(' ') || a.email;
+  async function supprimerApporteur() {
+    const a = apporteurs.find(x => x.email === app.email);
+    if (!a || norm($('#app-suppr-nom').value.trim()) !== norm(nomApp(a))) { toast('Le nom ne correspond pas.'); return; }
+    const btn = $('#app-supprimer');
+    btn.disabled = true; btn.textContent = 'Suppression…';
+    try { await rpc('crm_admin_apporteur_supprimer', { p_email: a.email }); }
+    catch (err) { toast(err.message); btn.disabled = false; btn.textContent = 'Supprimer définitivement'; return; }
+    $('#dlg-app').close();
+    toast(`${nomApp(a)} supprimé`);
+    await charger();
+  }
+  // Bouton « Supprimer » en bas d'une fiche : amène à la zone de confirmation.
+  function allerSuppression(zone, champ) {
+    $(zone)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => $(champ)?.focus({ preventScroll: true }), 350);
   }
   async function enregistrerApporteur() {
     const infos = { forme: $('#ai-forme').value };
@@ -1032,7 +1058,13 @@
         catch (err) { toast(err.message); }
       }
     });
+    $('#rev-suppr').addEventListener('click', () => allerSuppression('#rev-zone-suppr', '#rev-suppr-nom'));
+    $('#app-suppr').addEventListener('click', () => allerSuppression('#app-zone-suppr', '#app-suppr-nom'));
+    $('#app-body').addEventListener('input', e => {
+      if (e.target.id === 'app-suppr-nom') { const a = apporteurs.find(x => x.email === app.email); $('#app-supprimer').disabled = !a || norm(e.target.value.trim()) !== norm(nomApp(a)); }
+    });
     $('#app-body').addEventListener('click', async e => {
+      if (e.target.id === 'app-supprimer') { supprimerApporteur(); return; }
       if (e.target.dataset.reinit) { if (await reinitialiser(e.target.dataset.reinit)) { await charger(); ouvrirApporteur(app.email); } return; }
       const st = e.target.dataset.statut;
       if (st) {
