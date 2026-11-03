@@ -1201,6 +1201,7 @@ switchTab(ongletAccueil());
 document.addEventListener('gesturestart', e => e.preventDefault());
 Offre.init();
 Reprise.init();
+EntreeStock.init();
 Scan.init();
 Photos.init();
 Param.init();

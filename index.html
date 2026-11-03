@@ -245,6 +245,21 @@
       <button type="button" id="r-btn-enregistrer">Enregistrer pour plus tard</button>
       <button type="button" id="r-btn-suivant" class="primary">Coter →</button>
       <button type="button" id="r-btn-valider" class="success">Valider</button>
+      <button type="button" id="r-btn-editer" hidden>Modifier</button>
+      <button type="button" id="r-btn-stock" class="success" hidden>Rentrer en stock →</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-entree" class="plein">
+  <div class="o-page">
+    <div class="o-tete"><h2 id="entree-titre">Rentrer en stock</h2>
+      <button type="button" id="s-btn-fermer" class="ghost-dark" aria-label="Fermer">✕</button></div>
+    <div id="entree-body" class="o-body"></div>
+    <div class="actions o-actions">
+      <button type="button" id="s-btn-retour">Retour à la reprise</button>
+      <span class="spacer"></span>
+      <button type="button" id="s-btn-entrer" class="success">Entrer en stock ✓</button>
     </div>
   </div>
 </dialog>
@@ -369,6 +384,7 @@
 <script src="photos.js"></script>
 <script src="offre.js"></script>
 <script src="reprise.js"></script>
+<script src="entree.js"></script>
 <script src="parametres.js"></script>
 <script src="papiers.js"></script>
 <script src="facture.js"></script>

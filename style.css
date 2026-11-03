@@ -680,3 +680,17 @@ dialog.visionneuse::backdrop { background: #000; }
 .visionneuse .car-fleche { opacity: 1; width: 46px; height: 46px; }
 .visionneuse .car-compteur { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); font-size: 14px; padding: 4px 12px; }
 .vis-fermer { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 0; background: rgba(255,255,255,.15); color: #fff; font-size: 20px; }
+/* Scan de la carte grise dans la reprise */
+.r-cg { gap: 6px; }
+.r-cg > label.button { align-self: flex-start; font-size: 15px; font-weight: 600; color: var(--text); border-color: color-mix(in srgb, var(--primary) 45%, var(--line)); }
+.r-cg .button.busy { opacity: .55; pointer-events: none; }
+/* Entrée en stock d'une reprise : photos, infos, options, vente */
+#entree-body .field.a-remplir input, #entree-body .field.a-remplir select { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
+.s-photos { min-height: 40px; }
+.s-photo-btns { margin: 10px 0 4px; flex-wrap: wrap; }
+.s-options { display: grid; gap: 8px; margin: 10px 0 14px; }
+.s-options details { border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; background: var(--card); }
+.s-options summary { color: var(--text); font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.s-options .s-n:not(:empty) { background: var(--accent); color: #111; border-radius: 99px; padding: 0 8px; font-size: 12px; font-weight: 700; }
+.s-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px 10px; margin-top: 8px; }
+.s-auto { font-style: normal; font-size: 11px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-left: 4px; }

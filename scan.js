@@ -120,28 +120,68 @@ const Scan = (() => {
     return out;
   }
 
-  const CARBURANTS = { ES: 'Essence', GO: 'Diesel', EL: 'Électrique', EE: 'Hybride', EH: 'Hybride', GL: 'Hybride', EG: 'GPL', GP: 'GPL', FE: 'Essence' };
+  const CARBURANTS = { ES: 'Essence', GO: 'Diesel', EL: 'Électrique', EE: 'Hybride rechargeable', EH: 'Hybride', GL: 'Hybride rechargeable', GH: 'Hybride', EG: 'GPL', GP: 'GPL', FE: 'Essence', ET: 'Essence' };
+  // Rubrique de la carte grise (ex. « D.1 »), le point étant souvent mal lu (D1, D,1, D 1).
+  const rub = r => r.replace('.', '[.,\\s]?');
   function apres(t, rubrique) {
     // Valeur qui suit une rubrique de la carte grise (ex. « D.1 RENAULT »), sur la même ligne.
-    const m = t.match(new RegExp('(?:^|\\s)' + rubrique.replace('.', '\\.') + '\\s*[:\\-)]?\\s*([^\\n]+)'));
-    return m ? m[1].replace(/\s+[A-Z]\.\d.*$/, '').trim() : '';
+    // La valeur peut être collée à la rubrique (« D.1PEUGEOT ») ; « D.2.1 » n'est pas « D.2 ».
+    const m = t.match(new RegExp('(?:^|\\s)' + rub(rubrique) + '(?![.,]?\\d)\\s*[:\\-).]?\\s*([^\\n]+)'));
+    return m ? m[1].replace(/\s+\(?[A-Z]\s?[.,]\s?\d.*$/, '').replace(/[|_]+/g, ' ').trim() : '';
   }
+  const nombre = (T, rubrique) => (T.match(new RegExp('(?:^|\\s)' + rub(rubrique) + '\\s*[:\\-).]?\\s*(\\d{1,5}(?:[.,]\\d+)?)\\b')) || [])[1] || '';
   function carteGrise(t) {
     const T = propre(t), out = {};
-    const plaque = T.match(/\b([A-HJ-NP-TV-Z]{2})[\s-]?(\d{3})[\s-]?([A-HJ-NP-TV-Z]{2})\b/);
-    if (plaque) out.immatriculation = `${plaque[1]}-${plaque[2]}-${plaque[3]}`;
-    const vin = [...T.matchAll(/\b([A-HJ-NPR-Z0-9]{17})\b/g)].map(m => m[1]).find(x => /\d/.test(x) && /[A-Z]/.test(x));
+    // A : plaque, au format actuel (AB-123-CD) ou ancien (1234 AB 974).
+    // (la rubrique A est souvent collée à la plaque : « AGH-512-KT ») ; une plaque avec tirets est préférée.
+    const siv = T.match(/([A-HJ-NP-TV-Z]{2})-(\d{3})-([A-HJ-NP-TV-Z]{2})(?![A-Z0-9])/) || T.match(/([A-HJ-NP-TV-Z]{2})[\s-]?(\d{3})[\s-]?([A-HJ-NP-TV-Z]{2})(?![A-Z0-9])/);
+    const fni = T.match(/(?:^|\s)A\s*[.:)]?\s*(\d{1,4})[\s-]?([A-Z]{1,3})[\s-]?(97[1-6]|\d{2}|2[AB])\b/);
+    if (siv) out.immatriculation = `${siv[1]}-${siv[2]}-${siv[3]}`;
+    else if (fni) out.immatriculation = `${fni[1]} ${fni[2]} ${fni[3]}`;
+    else {
+      // Photo moyenne : chiffres lus comme des lettres (5→S, 1→I…), seulement juste après la rubrique A.
+      const brut = (T.match(/(?:^|\n)\s*A\s*[.:)]?\s*([A-Z0-9-]{7,10})(?=\s|$)/) || [])[1];
+      const p = brut && brut.replace(/-/g, '').replace(/^A(?=.{7}$)/, '');
+      const chiffre = { O: '0', D: '0', Q: '0', I: '1', L: '1', T: '1', Z: '2', S: '5', B: '8', G: '6' };
+      const lettre = { 0: 'O', 1: 'I', 2: 'Z', 5: 'S', 8: 'B', 6: 'G' };
+      if (p && p.length === 7) {
+        const l = x => [...x].map(c => lettre[c] || c).join(''), c = [...p.slice(2, 5)].map(x => chiffre[x] || x).join('');
+        const a = l(p.slice(0, 2)), b = l(p.slice(5));
+        if (/^[A-HJ-NP-TV-Z]{2}$/.test(a) && /^\d{3}$/.test(c) && /^[A-HJ-NP-TV-Z]{2}$/.test(b)) out.immatriculation = `${a}-${c}-${b}`;
+      }
+    }
+    // E : VIN (17 caractères, sans I, O ni Q).
+    const vinRub = T.match(new RegExp('(?:^|\\s)E\\s*[.:)]?\\s*([A-HJ-NPR-Z0-9]{17})\\b'));
+    const vin = vinRub ? vinRub[1] : [...T.matchAll(/\b([A-HJ-NPR-Z0-9]{17,18})\b/g)]
+      .map(m => m[1].length === 18 && m[1][0] === 'E' ? m[1].slice(1) : m[1]) // « EVF3… » : rubrique E collée
+      .find(x => x.length === 17 && /\d/.test(x) && /[A-Z]/.test(x));
     if (vin) out.vin = vin;
-    const d = T.match(/(?:^|\s)B\s*[:\-)]?\s*(\d{2})[\/.](\d{2})[\/.](\d{4})/) || T.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (d) { out.miseEnCirculation = dateIso(d[1], d[2], d[3]); out.annee = d[3]; }
+    // B : 1re mise en circulation (sinon la première date de la carte).
+    const d = T.match(/(?:^|\s)B\s*[:\-).]?\s*(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})/) || T.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (d && Number(d[2]) >= 1 && Number(d[2]) <= 12) { out.miseEnCirculation = dateIso(d[1], d[2], d[3]); out.annee = d[3]; }
+    // D.1 marque, D.2 version (type, variante), D.3 modèle (dénomination commerciale).
     const marque = apres(T, 'D.1');
     if (marque) out.marque = nomPropre(marque.split(' ')[0]);
     const modele = apres(T, 'D.3');
     if (modele) out.modele = nomPropre(modele);
-    const cv = T.match(/P\.6\s*[:\-)]?\s*(\d{1,3})\b/);
-    if (cv) out.puissanceFiscale = cv[1];
-    const nrj = T.match(/P\.3\s*[:\-)]?\s*([A-Z]{2})\b/);
+    const version = apres(T, 'D.2');
+    if (version && !/^D\s?[.,]?\s?2/.test(version)) out.typeVariante = version;
+    // P.1 cylindrée (cm3), P.2 puissance en kW (convertie en ch), P.3 énergie, P.6 puissance fiscale.
+    const cyl = nombre(T, 'P.1');
+    if (cyl && Number(cyl) >= 50 && Number(cyl) <= 9000) out.cylindree = cyl;
+    const kw = Number(nombre(T, 'P.2').replace(',', '.'));
+    if (kw >= 5 && kw <= 900) { out.puissanceKw = String(kw); out.puissanceCh = String(Math.round(kw * 1.36)); }
+    const nrj = T.match(new RegExp('(?:^|\\s)' + rub('P.3') + '\\s*[:\\-).]?\\s*([A-Z]{2})\\b'));
     if (nrj && CARBURANTS[nrj[1]]) out.carburant = CARBURANTS[nrj[1]];
+    const cv = nombre(T, 'P.6');
+    if (cv && Number(cv) >= 1 && Number(cv) <= 99) out.puissanceFiscale = cv;
+    // J.1 genre (VP, CTTE…), S.1 places assises, V.7 CO2.
+    const genre = T.match(new RegExp('(?:^|\\s)' + rub('J.1') + '\\s*[:\\-).]?\\s*(VP|CTTE|DERIV-VP|MTL|MTT1|MTT2|CL|QM|VASP|TRA|CAM)\\b'));
+    if (genre) out.genre = genre[1];
+    const places = nombre(T, 'S.1');
+    if (places && Number(places) >= 1 && Number(places) <= 9) out.places = places;
+    const co2 = nombre(T, 'V.7');
+    if (co2 && Number(co2) <= 500) out.co2 = co2;
     const titulaire = apres(T, 'C.1');
     if (titulaire) out.titulaire = nomPropre(titulaire);
     return out;
