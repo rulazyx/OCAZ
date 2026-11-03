@@ -928,8 +928,8 @@ begin
   update public.crm_apporteurs set doit_changer_mdp = true where email = e;
 end $$;
 
--- Véhicules partenaires : ceux que les autres garages du réseau partagent (sans la commission des apporteurs).
--- La démo voit aussi ses propres véhicules, pour avoir quelque chose à montrer.
+-- Véhicules du réseau : ceux que les garages du réseau partagent (sans la commission des apporteurs).
+-- Le garage y voit aussi ses propres véhicules partagés (marqués « moi »), pour vérifier qu'ils sont bien dans le réseau.
 create or replace function public.crm_reseau_partenaires() returns json
 language plpgsql stable security definer set search_path = public as $$
 declare eid uuid := public.crm_entreprise(); d boolean;
@@ -938,9 +938,9 @@ begin
   select demo into d from public.crm_entreprises where id = eid;
   return coalesce((select json_agg(json_build_object('entreprise_id', r.entreprise_id, 'garage', r.data -> 'garage',
       'vehicules', (select coalesce(jsonb_agg(v - 'commission' - 'commissionTexte'), '[]'::jsonb) from jsonb_array_elements(coalesce(r.data -> 'vehicules', '[]'::jsonb)) v),
-      'maj_le', r.maj_le) order by r.maj_le desc)
+      'maj_le', r.maj_le, 'moi', r.entreprise_id = eid) order by r.entreprise_id = eid, r.maj_le desc)
     from public.crm_reseau r join public.crm_entreprises e on e.id = r.entreprise_id
-    where r.actif and e.demo = d and (r.entreprise_id <> eid or d)), '[]'::json);
+    where r.actif and e.demo = d), '[]'::json);
 end $$;
 
 revoke execute on function public.crm_admin_revendeurs(), public.crm_admin_revendeur_enregistrer(uuid, text, jsonb), public.crm_admin_compte_retirer(text),

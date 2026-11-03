@@ -1,4 +1,5 @@
-// Stock > « Partenaires » : les véhicules que les autres garages du réseau Ocaz partagent (lecture seule).
+// Stock > « Partenaires » : les véhicules que les garages du réseau Ocaz partagent (lecture seule).
+// Les véhicules partagés par le garage lui-même y figurent aussi, avec le badge « Mon garage », après ceux des autres.
 // Un client cherche un modèle qu'on n'a pas ? On appelle le garage qui l'a.
 const Partenaires = (() => {
   let garages = null, charge = 0, enCours = null;
@@ -26,14 +27,14 @@ const Partenaires = (() => {
     if (!garages) charger();
     const q = norm($('#search').value.trim());
     const liste = vehicules().filter(({ g, v }) => !q || norm([v.marque, v.modele, v.finition, v.annee, v.couleur, v.carburant, g.garage?.nom, g.garage?.ville].join(' ')).includes(q));
-    $('#count').textContent = garages ? `${liste.length} véhicule${liste.length > 1 ? 's' : ''} chez les garages partenaires` : 'Chargement des véhicules partenaires…';
+    $('#count').textContent = garages ? `${liste.length} véhicule${liste.length > 1 ? 's' : ''} dans le réseau` : 'Chargement des véhicules partenaires…';
     if (!garages) { $('#list').innerHTML = ''; return; }
     $('#list').innerHTML = liste.length ? liste.map(({ g, v }) => {
       const nom = [v.marque, v.modele, v.finition].filter(Boolean).join(' ');
       return `<div class="card partenaire" data-partenaire="${esc(g.entreprise_id)}" data-pv="${esc(v.id)}">
         ${Visionneuse.carrousel((v.photos || []).map(chemin => ({ chemin })), { alt: nom + ', photo', classe: 'car-carte' })}
         <div class="top"><span class="title">${esc(nom)}</span>
-          <span class="c-badges">${v.reserve ? '<span class="badge b-orange">Réservé</span>' : ''}<span class="badge b-grey">${esc(g.garage?.nom || 'Garage')}</span></span></div>
+          <span class="c-badges">${v.reserve ? '<span class="badge b-orange">Réservé</span>' : ''}<span class="badge ${g.moi ? 'b-green' : 'b-grey'}">${g.moi ? 'Mon garage' : esc(g.garage?.nom || 'Garage')}</span></span></div>
         <div class="sub">${esc([v.annee, km(v.kilometrage), v.carburant, v.boite, v.type, v.couleur].filter(Boolean).join(' · '))}</div>
         <div class="top"><span class="sub">${esc(g.garage?.ville || '')}</span><span class="price">${euros(v.prix) || 'Prix sur demande'}</span></div></div>`;
     }).join('') : `<div class="empty">${ILLUS.stock}<strong>${vehicules().length ? 'Aucun résultat' : 'Aucun véhicule partenaire pour le moment'}</strong>
@@ -52,7 +53,7 @@ const Partenaires = (() => {
     const nom = [v.marque, v.modele, v.finition].filter(Boolean).join(' ');
     const msg = `Bonjour, ici ${Param.get().garage.nom || 'un garage du réseau Ocaz'}. Votre ${nom}${v.annee ? ' de ' + v.annee : ''} est-il toujours disponible ?`;
     const sujet = [nom, v.annee, euros(v.prix)].filter(Boolean).join(' · ');
-    const actions = [
+    const actions = g.moi ? [] : [
       Messagerie.actif && Messagerie.moi !== 'g:' + g.entreprise_id && [`💬 Message à ${gg.nom || 'ce garage'} dans Ocaz`, () => Messagerie.contacter('g:' + g.entreprise_id, gg.nom, sujet)],
       gg.telephone && [`📞 Appeler ${gg.nom || 'le garage'} (${gg.telephone})`, () => { location.href = 'tel:' + gg.telephone.replace(/\s/g, ''); }],
       gg.telephone && ['💬 WhatsApp', () => window.open(Papiers.lienWhatsapp({ telephone: gg.telephone }, msg), '_blank', 'noopener')],
@@ -62,7 +63,8 @@ const Partenaires = (() => {
     $('#actions-sous').textContent = [v.annee, km(v.kilometrage), v.carburant, v.boite, euros(v.prix), gg.nom, gg.ville].filter(Boolean).join(' · ');
     $('#actions-liste').innerHTML = Visionneuse.carrousel((v.photos || []).map(chemin => ({ chemin })), { alt: nom + ', photo', zoom: true, classe: 'car-fiche' })
       + (v.texte ? `<p class="hint" style="white-space:pre-line">${esc(v.texte)}</p>` : '')
-      + (actions.length ? actions.map(([l], i) => `<button type="button" data-action="${i}">${esc(l)}</button>`).join('') : '<p class="hint">Ce garage n\'a pas laissé de coordonnées.</p>');
+      + (g.moi ? '<p class="hint">C\'est un de vos véhicules, tel que les garages et les apporteurs du réseau le voient.</p>'
+        : actions.length ? actions.map(([l], i) => `<button type="button" data-action="${i}">${esc(l)}</button>`).join('') : '<p class="hint">Ce garage n\'a pas laissé de coordonnées.</p>');
     $('#actions-liste').onclick = ev => {
       const b = ev.target.closest('[data-action]');
       if (!b) return;
