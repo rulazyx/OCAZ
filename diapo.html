@@ -318,7 +318,11 @@ body.present .nav { display: flex; }
 .results span:not(.lbl) { display: inline-flex; gap: .6em; align-items: center; background: var(--graphite); color: #fff; padding: .6em 1.1em; border-radius: 999px; font-weight: 600; font-size: max(12px, 1.3cqw); }
 .results svg { color: var(--accent); }
 
-.opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6cqw; margin-top: 3cqw; }
+.opts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.6cqw; margin-top: 2.6cqw; }
+.opts.opts-2 { margin-top: 1.4cqw; }
+.opts-titre { margin: 2.6cqw 0 0; font-size: max(14px, 1.7cqw); font-weight: 700; color: var(--night-fg); display: flex; align-items: center; gap: .8em; }
+.opts-titre::before { content: ""; width: 1.6em; height: 2px; background: var(--accent); border-radius: 2px; }
+.opt.ponctuel { border-style: dashed; }
 .opt { display: flex; gap: 1.4cqw; align-items: center; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 1.2cqw; padding: 1.8cqw; min-width: 0; font-weight: 600; font-size: max(13px, 1.45cqw); line-height: 1.3; }
 .opt .ico { background: rgba(245,158,11,.14); color: var(--accent); }
 .dark h2 { color: var(--night-fg); }
@@ -329,6 +333,8 @@ body.present .nav { display: flex; }
 
 @media (max-width: 1000px) {
   .poles, .scene, .track, .opts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .opts.opts-2 { max-width: none; margin-top: 10px; }
+  .opts-titre { margin-top: 18px; }
   .pole, .bubble, .opt { padding: 18px; border-radius: 14px; }
   .bubble::after { display: none; }
   .eco { max-height: none; }
@@ -610,8 +616,11 @@ body.present .nav { display: flex; }
       <div class="opt"><span class="ico"><i class="fa-solid fa-address-book"></i></span>Base de données clients &amp; CRM</div>
       <div class="opt"><span class="ico"><i class="fa-solid fa-id-card"></i></span>Reprise VO avec scan auto de carte grise</div>
       <div class="opt"><span class="ico"><i class="fa-solid fa-file-invoice-dollar"></i></span>Gestion administrative &amp; facturation</div>
-      <div class="opt"><span class="ico"><i class="fa-solid fa-plug"></i></span>Interconnexion avec vos logiciels</div>
-      <div class="opt"><span class="ico"><i class="fa-solid fa-laptop-code"></i></span>Refonte de site web sur-mesure</div>
+    </div>
+    <h3 class="opts-titre">Prestations ponctuelles</h3>
+    <div class="opts opts-2">
+      <div class="opt ponctuel"><span class="ico"><i class="fa-solid fa-laptop-code"></i></span>Création de site web</div>
+      <div class="opt ponctuel"><span class="ico"><i class="fa-solid fa-plug"></i></span>Interconnexion de vos logiciels</div>
     </div>
     <div class="contact-line">
       <span><i class="fa-solid fa-envelope"></i><b>contact@ocaz.re</b></span>
