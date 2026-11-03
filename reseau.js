@@ -206,6 +206,13 @@ const Reseau = (() => {
       : await statut(x.lead, 'perdu', { motif: $('#lead-motif').value });
     if (!ok) return;
     $('#dlg-lead').close();
+    // Sans l'option Commandes : la vente est enregistrée ici, pour que le lead révision suive dans 11 mois.
+    if (mode === 'vendu' && !Droits.module('commandes') && !venteLivree(x.lead) && db.get('vehicules', x.lead.vehicule_id)?.statut !== 'Vendu') {
+      const l = x.lead;
+      const client = (l.client_id && db.get('clients', l.client_id)) ? l.client_id
+        : { prenom: l.client_prenom, nom: l.client_nom, telephone: l.client_tel, email: l.client_email, source: 'Apporteur réseau' };
+      Vente.enregistrer({ vehiculeId: l.vehicule_id, client, prix: $('#lead-prix').value === '' ? '' : Number($('#lead-prix').value) });
+    }
     if (mode === 'vendu') { vue = 'Vendus'; render(); toast('Lead vendu : la facture de l\'apporteur est prête'); } else toast('Lead clos');
   }
 

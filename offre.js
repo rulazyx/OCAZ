@@ -97,7 +97,7 @@ const Offre = (() => {
     const ligne = (l, m, cls = '') => `<div class="o-ligne ${cls}"><span>${l}</span><strong>${m}</strong></div>`;
     $('#offre-body').innerHTML = `
       ${selecteur('vehiculeId', 'Véhicule souhaité', stock(), etat.vehiculeId, libelleV, 'Aucun véhicule disponible en stock.')}
-      ${Droits.achat() ? menuReprise() : ''}
+      ${Droits.module('reprises') ? menuReprise() : ''}
       ${selecteur('clientId', 'Client', db.all('clients').slice().sort((a, b) => norm(clientNom(a)).localeCompare(norm(clientNom(b)))), etat.clientId, clientNom, 'Aucun client pour l\'instant : crée-le ci-dessous.')}
       ${etat.clientId ? '' : `<section class="o-bloc o-nouveau-client">
         <h3 class="section">Nouveau client</h3>
