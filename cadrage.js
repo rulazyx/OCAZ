@@ -78,7 +78,7 @@ const Cadrage = (() => {
   async function auto(img) {
     try {
       const b = await vehicule(img);
-      if (b) return { cadre: autour(img, b), trouve: true };
+      if (b) return { cadre: autour(img, b), trouve: true, boite: b };
     } catch (e) { return { cadre: centre(img), trouve: false, erreur: true }; }
     return { cadre: centre(img), trouve: false };
   }

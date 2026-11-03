@@ -84,15 +84,64 @@ const Photos = (() => {
 
   // Réduit la photo (1600 px de large au plus, JPEG) : environ 300 Ko au lieu de plusieurs Mo.
   // Cadrage sur le véhicule (format 4:3, voir cadrage.js), retouche et logo selon les réglages.
+  // Renvoie { blob, boite } : boite = le véhicule trouvé sur la photo (sert à deviner la vue), sinon null.
   async function reduire(fichier) {
     const img = await lireFichier(fichier);
-    if (Param.get().photos.cadrer) return finir(Cadrage.dessiner(img, (await Cadrage.auto(img)).cadre));
+    if (Param.get().photos.cadrer) {
+      const { cadre, boite } = await Cadrage.auto(img);
+      return { blob: await finir(Cadrage.dessiner(img, cadre)), boite: boite || null };
+    }
     const echelle = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement('canvas');
     c.width = Math.round(img.naturalWidth * echelle);
     c.height = Math.round(img.naturalHeight * echelle);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return finir(c);
+    return { blob: await finir(c), boite: null };
+  }
+
+  // ---------- Vues : avant, côté, arrière toujours en premier, dans cet ordre ----------
+  // La vue de chaque photo est gardée sur la fiche (v.vues = { chemin: 'avant' | 'cote' | 'arriere' | 'autre' }),
+  // et la liste des photos est remise dans l'ordre à chaque changement : le site, le réseau et les PDF suivent.
+  const VUES = ['avant', 'cote', 'arriere'];
+  const LIB_VUE = { avant: 'Avant', cote: 'Côté', arriere: 'Arrière', autre: 'Autre' };
+  const PROCHAINE = { avant: "de l'avant", cote: 'du côté', arriere: "de l'arrière" };
+  const vuesDe = v => (v && v.vues) || {};
+  const manquantes = v => { const pris = new Set(Object.values(vuesDe(v))); return VUES.filter(x => !pris.has(x)); };
+  // Ordre : la 1re photo avant, la 1re côté, la 1re arrière, puis toutes les autres dans leur ordre d'ajout.
+  function ordonner(photos, vues) {
+    const tete = VUES.map(x => photos.find(p => vues[p] === x)).filter(Boolean);
+    return tete.concat(photos.filter(p => !tete.includes(p)));
+  }
+  function trier(vid) {
+    const v = db.get('vehicules', vid);
+    if (!v) return;
+    const vues = Object.fromEntries(Object.entries(vuesDe(v)).filter(([p]) => liste(v).includes(p)));
+    const photos = ordonner(liste(v), vues);
+    if (photos.join() !== liste(v).join() || Object.keys(vues).length !== Object.keys(vuesDe(v)).length)
+      db.upsert('vehicules', { id: vid, photos, vues });
+  }
+  // Vue d'une nouvelle photo. Appareil photo : l'appli demande l'avant, puis le côté, puis l'arrière.
+  // Galerie : un véhicule très allongé (plus de 1,9 fois plus large que haut) est vu de côté ; les autres
+  // remplissent l'avant puis l'arrière s'ils manquent. Un appui sur l'étiquette de la photo corrige.
+  function deviner(v, boite, camera) {
+    const manque = manquantes(v);
+    const allonge = boite && boite.w / boite.h > (camera ? 2.1 : 1.9);
+    if (allonge && manque.includes('cote')) return 'cote';
+    if (camera) return manque[0] || 'autre';
+    return manque.find(x => x !== 'cote') || 'autre';
+  }
+  function changerVue(chemin) {
+    const v = db.get('vehicules', vehiculeId);
+    const cycle = [...VUES, 'autre'];
+    const actuelle = vuesDe(v)[chemin] || 'autre';
+    const suivante = cycle[(cycle.indexOf(actuelle) + 1) % cycle.length];
+    // Une seule photo par vue : l'ancienne photo de cette vue passe en « Autre ».
+    const vues = { ...vuesDe(v) };
+    if (suivante !== 'autre') Object.keys(vues).forEach(p => { if (vues[p] === suivante) vues[p] = 'autre'; });
+    vues[chemin] = suivante;
+    db.upsert('vehicules', { id: vehiculeId, vues });
+    trier(vehiculeId);
+    rendre();
   }
 
   // Les photos déjà cadrées sur le véhicule finissent par « -c.jpg » : les autres (prises avant le cadrage) sont
@@ -107,7 +156,9 @@ const Photos = (() => {
     if (error) throw new Error('Photo non enregistrée : ' + error.message);
     const v = db.get('vehicules', vid);
     if (!v) throw new Error('Véhicule supprimé');
-    db.upsert('vehicules', { id: vid, photos: liste(v).map(p => p === chemin ? nouveau : p) });
+    const vues = { ...vuesDe(v) };
+    if (vues[chemin]) { vues[nouveau] = vues[chemin]; delete vues[chemin]; }
+    db.upsert('vehicules', { id: vid, photos: liste(v).map(p => p === chemin ? nouveau : p), vues });
     Sync.client.storage.from(BUCKET).remove([chemin]);
     liens.delete(chemin);
     return nouveau;
@@ -345,6 +396,48 @@ const Photos = (() => {
     el.innerHTML = Visionneuse.carrousel(urls.filter(Boolean), { alt: vehiculeNom(v) + ', photo', zoom: true, classe: 'car-fiche' });
   }
 
+  // Fiche du véhicule : la photo choisie en grand, les miniatures en dessous (un appui choisit la photo).
+  // La grande photo défile au doigt ou avec les flèches ; un appui l'ouvre en plein écran.
+  async function vitrine(el, v) {
+    const ph = liste(v);
+    if (!ph.length) {
+      el.innerHTML = v?.image ? `<div class="vf-grande modele"><img src="${esc(v.image)}" alt="" onerror="this.remove()"></div>`
+        : `<div class="vf-grande vide"><span>📷 Pas encore de photos${deblocable(v) ? ' : elles se prennent depuis le téléphone' : ''}</span></div>`;
+      return;
+    }
+    const urls = (await signer(ph).catch(() => [])).filter(Boolean);
+    if (!urls.length) { el.innerHTML = '<div class="vf-grande vide"><span>Connecte-toi pour voir les photos.</span></div>'; return; }
+    const vues = vuesDe(v);
+    const nomV = vehiculeNom(v);
+    el.innerHTML = `<div class="vf-grande"><img id="vf-img" src="${esc(urls[0])}" alt="${esc(nomV)}, photo 1" draggable="false">
+        ${urls.length > 1 ? `<button type="button" class="car-fleche car-prec" data-vf="-1" aria-label="Photo précédente">‹</button>
+        <button type="button" class="car-fleche car-suiv" data-vf="1" aria-label="Photo suivante">›</button>` : ''}
+        <span class="car-compteur" id="vf-n">1 / ${urls.length}</span></div>
+      ${urls.length > 1 ? `<div class="vf-miniatures">${urls.map((u, i) => `<button type="button" data-vfi="${i}" class="${i ? '' : 'active'}" aria-label="Photo ${i + 1}">
+        <img src="${esc(u)}" alt="" loading="lazy">${vues[ph[i]] && vues[ph[i]] !== 'autre' ? `<span>${LIB_VUE[vues[ph[i]]]}</span>` : ''}</button>`).join('')}</div>` : ''}`;
+    let i = 0;
+    const choisir = k => {
+      i = (k + urls.length) % urls.length;
+      el.querySelector('#vf-img').src = urls[i];
+      el.querySelector('#vf-img').alt = `${nomV}, photo ${i + 1}`;
+      el.querySelector('#vf-n').textContent = `${i + 1} / ${urls.length}`;
+      el.querySelectorAll('[data-vfi]').forEach(b => b.classList.toggle('active', +b.dataset.vfi === i));
+      el.querySelector(`[data-vfi="${i}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    };
+    el.querySelectorAll('[data-vfi]').forEach(b => b.addEventListener('click', () => choisir(+b.dataset.vfi)));
+    el.querySelectorAll('[data-vf]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); choisir(i + +b.dataset.vf); }));
+    // Glisser sur la grande photo : photo suivante ou précédente. Un simple appui : plein écran.
+    const grande = el.querySelector('.vf-grande');
+    let x0 = null;
+    grande.addEventListener('pointerdown', e => { if (!e.target.closest('[data-vf]')) x0 = e.clientX; });
+    grande.addEventListener('pointerup', e => {
+      if (x0 === null) return;
+      const dx = e.clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40 && urls.length > 1) choisir(i + (dx < 0 ? 1 : -1));
+      else if (Math.abs(dx) < 8) Visionneuse.ouvrir(urls, i);
+    });
+  }
+
   // Écran de prise de vue.
   async function rendre() {
     const v = db.get('vehicules', vehiculeId);
@@ -354,7 +447,13 @@ const Photos = (() => {
     $('#photos-compteur').innerHTML = `<strong>${ph.length} / ${MAX}</strong> ${reste > 0 ? `· encore ${reste} minimum` : '· minimum atteint'}${envois ? ` · envoi de ${envois} photo(s)…` : ''}`;
     $('#photos-compteur').className = 'ph-compteur' + (reste > 0 ? ' manque' : ' ok');
     const urls = await signer(ph);
+    const vues = vuesDe(v), manque = manquantes(v);
+    $('#photos-guide').innerHTML = manque.length
+      ? `Photos à faire en premier : ${VUES.map(x => `<span class="${manque.includes(x) ? '' : 'fait'}">${manque.includes(x) ? '' : '✓ '}${LIB_VUE[x]}</span>`).join(' · ')}. Elles s'affichent toujours dans cet ordre.`
+      : '✓ Avant, côté et arrière : elles s\'affichent en premier, dans cet ordre.';
+    $('#photos-prendre').firstChild.textContent = manque.length ? `📷 Photo ${PROCHAINE[manque[0]]}` : '📷 Prendre une photo';
     $('#photos-grille').innerHTML = ph.map((p, i) => `<div class="ph"><img src="${esc(urls[i])}" alt="Photo ${i + 1}">
+      <button type="button" class="ph-vue${vues[p] && vues[p] !== 'autre' ? ' ok' : ''}" data-vue="${esc(p)}" aria-label="Vue de la photo : appuie pour changer">${LIB_VUE[vues[p] || 'autre']}</button>
       <button type="button" class="ph-suppr" data-suppr="${esc(p)}" aria-label="Supprimer la photo">✕</button>
       <span class="ph-outils"><button type="button" data-cadre="${esc(p)}">Cadrer</button><button type="button" data-flou="${esc(p)}">Flouter</button></span></div>`).join('')
       + Array.from({ length: envois }, () => '<div class="ph envoi"><span class="spin"></span></div>').join('');
@@ -381,7 +480,7 @@ const Photos = (() => {
     $('#dlg-photos').showModal();
   }
 
-  async function ajouter(fichiers) {
+  async function ajouter(fichiers, camera = false) {
     const v = db.get('vehicules', vehiculeId);
     const place = MAX - liste(v).length - envois;
     const lot = [...fichiers].slice(0, Math.max(0, place));
@@ -390,12 +489,14 @@ const Photos = (() => {
     rendre();
     for (const f of lot) {
       try {
-        const blob = await reduire(f);
+        const { blob, boite } = await reduire(f);
         const chemin = `${Sync.entreprise.id}/${vehiculeId}/${nom(Param.get().photos.cadrer)}`;
         const { error } = await Sync.client.storage.from(BUCKET).upload(chemin, blob, { contentType: 'image/jpeg' });
         if (error) throw new Error(error.message);
         const actuel = db.get('vehicules', vehiculeId);
-        db.upsert('vehicules', { id: vehiculeId, photos: liste(actuel).concat(chemin) });
+        const vue = deviner(actuel, boite, camera);
+        db.upsert('vehicules', { id: vehiculeId, photos: liste(actuel).concat(chemin), vues: { ...vuesDe(actuel), [chemin]: vue } });
+        trier(vehiculeId);
         originaux.set(chemin, f);
       } catch (err) {
         toast("Photo non envoyée : " + err.message);
@@ -410,19 +511,22 @@ const Photos = (() => {
     if (!confirm('Supprimer cette photo ?')) return;
     await Sync.client.storage.from(BUCKET).remove([chemin]);
     const v = db.get('vehicules', vehiculeId);
-    db.upsert('vehicules', { id: vehiculeId, photos: liste(v).filter(p => p !== chemin) });
+    const vues = { ...vuesDe(v) };
+    delete vues[chemin];
+    db.upsert('vehicules', { id: vehiculeId, photos: liste(v).filter(p => p !== chemin), vues });
     rendre();
   }
 
   function init() {
     ['#photos-input', '#photos-input-galerie'].forEach(s => $(s).addEventListener('change', e => {
-      if (e.target.files.length) ajouter(e.target.files);
+      if (e.target.files.length) ajouter(e.target.files, s === '#photos-input');
       e.target.value = '';
     }));
     $('#photos-grille').addEventListener('click', e => {
       if (e.target.dataset.suppr) supprimer(e.target.dataset.suppr);
       if (e.target.dataset.flou) ouvrirFlou(e.target.dataset.flou);
       if (e.target.dataset.cadre) ouvrirCadre(e.target.dataset.cadre);
+      if (e.target.dataset.vue) changerVue(e.target.dataset.vue);
     });
     ['cadrer', 'ameliorer', 'logo'].forEach(k => $('#ph-' + k).addEventListener('change', e => Param.save({ photos: { ...Param.get().photos, [k]: e.target.checked } })));
     initFlou();
@@ -472,5 +576,5 @@ const Photos = (() => {
     if (n) { toast(`${n} photo${n > 1 ? 's' : ''} recadrée${n > 1 ? 's' : ''} sur le véhicule`); render(); }
   }
 
-  return { recadrerAnciennes, estTelephone, deblocable, galerie, hydrater, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
+  return { vitrine, trier, recadrerAnciennes, estTelephone, deblocable, galerie, hydrater, premiere, jpeg, BUCKET, ouvrir, init, MIN, MAX };
 })();
