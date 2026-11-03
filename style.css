@@ -715,7 +715,7 @@ dialog.fiche-vehicule { width: min(760px, calc(100vw - 20px)); }
 @media (max-width: 760px) { dialog.fiche-vehicule { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; } }
 .fiche-vehicule #form { padding-top: calc(16px + env(safe-area-inset-top)); }
 .vf-photos { margin: 0 -20px 12px; }
-@media (min-width: 761px) { .vf-photos { margin: 0 0 12px; } }
+@media (min-width: 761px) { .vf-photos { margin: 0 auto 12px; max-width: min(100%, calc(52dvh * 4 / 3)); } }
 .vf-grande { position: relative; aspect-ratio: 4 / 3; background: #0d0f12; overflow: hidden; display: grid; place-items: center; touch-action: pan-y; cursor: zoom-in; }
 @media (min-width: 761px) { .vf-grande { border-radius: 14px; } }
 .vf-grande img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; -webkit-user-drag: none; }
