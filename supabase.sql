@@ -1540,3 +1540,27 @@ create policy "Fichiers : super-admin lecture" on storage.objects for select to 
 drop policy if exists "Fichiers : super-admin suppression" on storage.objects;
 create policy "Fichiers : super-admin suppression" on storage.objects for delete to authenticated
   using (bucket_id in ('photos', 'documents') and public.crm_est_superadmin());
+
+-- Admin : suppression complète d'un apporteur (compte, infos, leads, messagerie).
+create or replace function public.crm_admin_apporteur_supprimer(p_email text) returns void
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  e text := lower(trim(coalesce(p_email, '')));
+  a public.crm_apporteurs;
+begin
+  if not public.crm_est_superadmin() then raise exception 'Réservé à l''administrateur'; end if;
+  select * into a from public.crm_apporteurs where email = e;
+  if a.email is null then raise exception 'Apporteur introuvable.'; end if;
+  if a.demo then raise exception 'L''apporteur de démonstration ne peut pas être supprimé.'; end if;
+  delete from public.crm_conversations where 'a:' || e in (cle_a, cle_b);
+  delete from public.crm_msg_bloques where cle = 'a:' || e;
+  delete from public.crm_apporteurs where email = e; -- ses leads suivent (cascade)
+  if not exists (select 1 from public.crm_membres where email = e)
+     and not exists (select 1 from public.crm_superadmins s where lower(trim(s.email)) = e) then
+    delete from public.crm_identifiants where email = e;
+    delete from auth.users where lower(email) = e;
+  end if;
+end $$;
+
+revoke execute on function public.crm_admin_apporteur_supprimer(text) from public, anon;
+grant execute on function public.crm_admin_apporteur_supprimer(text) to authenticated;
