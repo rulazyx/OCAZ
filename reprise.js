@@ -43,8 +43,13 @@ const Reprise = (() => {
   function boutons(page) {
     page_ = page;
     const enCours = etat.statut === 'Reprise à étudier';
+    // Reprise validée, sur la fiche : Modifier, Rentrer en stock ou Annuler la reprise.
+    const validee = page === 2 && etat.statut === 'Reprise validée';
     $('#r-btn-suivant').hidden = page !== 1;
     $('#r-btn-valider').hidden = page !== 2 || !enCours;
+    $('#r-btn-editer').hidden = !validee;
+    $('#r-btn-stock').hidden = !validee;
+    $('#r-btn-enregistrer').hidden = validee;
     $('#r-btn-enregistrer').textContent = enCours ? 'Enregistrer pour plus tard' : 'Enregistrer';
     const annuler = $('#r-btn-annuler');
     annuler.hidden = !etat.id || !['Reprise à étudier', 'Reprise validée', 'Reprise refusée'].includes(etat.statut);
@@ -116,7 +121,7 @@ const Reprise = (() => {
       <div class="field"><label for="r-prixPropose">Prix de reprise proposé (€)</label>
         <input id="r-prixPropose" data-r="prixPropose" type="number" inputmode="decimal" class="r-prix" value="${esc(v.prixPropose || '')}" placeholder="À saisir"></div>
       <div class="field"><label for="r-defauts">Défauts constatés / notes</label><textarea id="r-defauts" data-r="defauts">${esc(v.defauts || '')}</textarea></div>
-      ${v.statut === 'Reprise validée' ? '<p class="hint">Reprise validée : choisis-la dans « Véhicule repris » d\'une offre. Quand l\'offre passe en commande, le véhicule entre en préparation.</p>' : ''}`;
+      ${v.statut === 'Reprise validée' ? '<p class="hint">Reprise validée : « Rentrer en stock » ouvre la page photos, infos, options et prix. Elle peut aussi être choisie dans « Véhicule repris » d\'une offre : quand l\'offre passe en commande, le véhicule entre en préparation.</p>' : ''}`;
     boutons(2);
   }
 
@@ -277,7 +282,17 @@ const Reprise = (() => {
       render();
       if (nouveau) alerteRecherche(saved);
     });
-    $('#r-btn-retour').addEventListener('click', () => { if (page_ === 2) page1(); else fermer(); });
+    $('#r-btn-retour').addEventListener('click', () => {
+      if (page_ === 2 && etat.statut === 'Reprise validée') { enregistrer(); fermer(); return; }
+      if (page_ === 2) page1(); else fermer();
+    });
+    $('#r-btn-editer').addEventListener('click', () => { enregistrer(); page1(); });
+    $('#r-btn-stock').addEventListener('click', () => {
+      if (!verifier()) return;
+      const saved = enregistrer();
+      $('#dlg-reprise').close();
+      EntreeStock.ouvrir(saved.id);
+    });
     $('#r-btn-enregistrer').addEventListener('click', () => {
       if (!String(etat.marque || etat.immatriculation || '').trim()) { toast('Indique au moins la plaque ou la marque.'); return; }
       if (etat.immatriculation) etat.immatriculation = formatPlaque(etat.immatriculation);
@@ -291,8 +306,9 @@ const Reprise = (() => {
       const saved = enregistrer({ statut: 'Reprise validée' });
       setTimeout(() => alerteRecherche(saved), 2800);
       filtreReprise = 'Reprises validées';
-      toast('Reprise validée : tu peux l\'ajouter dans une offre');
-      fermer();
+      render();
+      page2(); // la fiche validée propose Modifier, Rentrer en stock ou Annuler
+      toast('Reprise validée : rentre-la en stock, ou ajoute-la dans une offre');
     });
     $('#r-btn-annuler').addEventListener('click', () => {
       if (etat.statut === 'Reprise refusée') {

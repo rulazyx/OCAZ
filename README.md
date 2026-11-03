@@ -16,6 +16,10 @@ Ocaz, le logiciel des petits marchands de véhicules d'occasion (La Réunion), u
   `scan.js`) : plaque (A), VIN (E), date de 1re mise en circulation (B), marque (D.1), modèle (D.3), cylindrée (P.1),
   puissance (P.2 en kW → ch), énergie (P.3), puissance fiscale (P.6), places (S.1), CO2 (V.7). La plaque lue lance
   ensuite la recherche par plaque pour compléter, et la photo est rangée dans les documents du véhicule.
+  Une fois la reprise validée, sa fiche propose Modifier, Rentrer en stock ou Annuler la reprise. « Rentrer en stock »
+  (`entree.js`) ouvre une page Photos, Informations (reprises de la reprise, champs vides en jaune), Options (cases à
+  cocher par catégorie, pré-cochées d'après la boîte, l'énergie, les places et le nom de la version) et Vente (prix
+  d'achat, prix de vente, entrée en stock, livre de police). Les options cochées remplissent « Options et équipements ».
   Photos (`visionneuse.js`) : elles défilent au doigt sur téléphone et avec les flèches (ou ← →) sur ordinateur, dans les cartes
   du Stock, des Partenaires et sur la fiche ; sur la fiche, un appui ouvre le plein écran.
 - **Commandes** : relie un client et un véhicule, prix, acompte, statut. Le statut du véhicule suit la commande
